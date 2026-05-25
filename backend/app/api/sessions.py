@@ -161,3 +161,45 @@ async def get_parse_result(
             "parsed_data": parsed_data,
         },
     }
+
+
+@router.put("/sessions/{session_id}/parse")
+async def update_parse_result(
+    session_id: str,
+    body: Dict[str, Any],
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """用户修正解析结果
+
+    前端内联编辑后提交修正，更新 parsed_content。
+    """
+    result = await db.execute(
+        select(Session).where(Session.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail={
+            "code": 1002,
+            "message": "会话不存在",
+        })
+
+    if session.status != SessionStatus.PARSED:
+        raise HTTPException(status_code=400, detail={
+            "code": 1003,
+            "message": f"仅在解析完成状态可修正，当前状态: {session.status.value}",
+        })
+
+    import json
+    session.parsed_content = json.dumps(body.get("parsed_data", {}), ensure_ascii=False)
+    session.updated_at = datetime.utcnow()
+    await db.flush()
+
+    return {
+        "code": 0,
+        "message": "解析结果已更新",
+        "data": {
+            "session_id": str(session.id),
+            "status": session.status.value,
+        },
+    }
