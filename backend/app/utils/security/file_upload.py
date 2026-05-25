@@ -15,6 +15,7 @@ FILE_SIGNATURES = {
     "pdf": [b"%PDF"],
     "docx": [b"PK\x03\x04"],  # ZIP 格式（DOCX 是 ZIP 包）
     "doc": [b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"],  # OLE2 格式
+    "txt": [],  # 纯文本无固定魔数，跳过魔数校验
 }
 
 
@@ -100,6 +101,7 @@ def _check_mime_type(content_type: Optional[str]) -> Optional[str]:
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/msword",
+        "text/plain",
     ]
 
     if not content_type or content_type not in allowed_mimes:
@@ -117,12 +119,18 @@ async def _check_magic_number(file: UploadFile) -> Optional[str]:
     Returns:
         错误信息或 None
     """
+    # .txt 文件无固定魔数，跳过校验
+    if file.filename and file.filename.lower().endswith(".txt"):
+        return None
+
     # 读取前 8 字节
     header = await file.read(8)
     await file.seek(0)  # 重置文件指针
 
     # 检查是否匹配已知的文件签名
     for ext, signatures in FILE_SIGNATURES.items():
+        if ext == "txt":
+            continue
         for sig in signatures:
             if header.startswith(sig):
                 return None

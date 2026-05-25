@@ -4,7 +4,7 @@
 """
 
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Enum, Text
+from sqlalchemy import Column, String, DateTime, Enum, Text, Float
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 import enum
@@ -36,13 +36,16 @@ class Session(Base):
     file_size = Column(String(50), nullable=True)
     mime_type = Column(String(100), nullable=True)
 
+    # 解析进度 0.0 ~ 1.0
+    progress = Column(Float, default=0.0)
+
     # 时间戳
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     parsed_at = Column(DateTime, nullable=True)
     diagnosed_at = Column(DateTime, nullable=True)
 
-    # 解析结果
+    # 解析结果（JSON 字符串）
     parsed_content = Column(Text, nullable=True)
     parse_error = Column(Text, nullable=True)
 

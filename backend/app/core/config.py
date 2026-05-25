@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # 文件上传配置
     MAX_UPLOAD_SIZE_MB: int = 10
-    ALLOWED_EXTENSIONS: str = "pdf,docx,doc"
+    ALLOWED_EXTENSIONS: str = "pdf,docx,doc,txt"
 
     # 限流配置
     RATE_LIMIT_PER_MINUTE: int = 60

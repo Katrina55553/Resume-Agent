@@ -3,13 +3,26 @@
 处理简历上传和会话状态查询。
 """
 
+import os
+import uuid as uuid_lib
+from pathlib import Path
+from datetime import datetime
+
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import Dict, Any
 
 from app.core.database import get_db
+from app.core.config import settings
+from app.models.session import Session, SessionStatus
+from app.utils.security.file_upload import validate_upload_file
+from app.tasks.parse_task import parse_resume
 
 router = APIRouter()
+
+# 上传文件存储目录
+UPLOAD_DIR = Path("uploads")
 
 
 @router.post("/sessions")
@@ -19,18 +32,54 @@ async def create_session(
 ) -> Dict[str, Any]:
     """创建会话并上传简历
 
-    Args:
-        file: 上传的简历文件（PDF/DOCX）
-        db: 数据库会话
-
-    Returns:
-        会话 ID 和初始状态
+    流程：四重校验 → 保存文件 → 创建 DB 记录 → 触发 Celery 异步解析
     """
-    # TODO: 实现文件校验、存储、异步解析任务
+    # 1. 文件四重校验（扩展名/MIME/魔数/大小）
+    await validate_upload_file(file)
+
+    # 2. 生成会话 ID，随机重命名文件防碰撞
+    session_id = uuid_lib.uuid4()
+    ext = Path(file.filename).suffix.lower()
+    safe_filename = f"{session_id}{ext}"
+
+    # 二级目录分散存储：uploads/ab/abcd1234-.../resume.pdf
+    sub_dir = UPLOAD_DIR / str(session_id)[:2]
+    sub_dir.mkdir(parents=True, exist_ok=True)
+    file_path = sub_dir / safe_filename
+
+    # 3. 保存文件到磁盘
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    # 4. 创建数据库记录
+    session = Session(
+        id=session_id,
+        status=SessionStatus.UPLOADED,
+        original_filename=file.filename,
+        file_path=str(file_path),
+        file_size=f"{len(content) / 1024:.1f}KB",
+        mime_type=file.content_type,
+        progress=0.0,
+    )
+    db.add(session)
+    await db.flush()
+
+    # 5. 触发 Celery 异步解析任务
+    task = parse_resume.delay(str(session_id), str(file_path))
+
+    # 更新状态为解析中
+    session.status = SessionStatus.PARSING
+    await db.flush()
+
     return {
-        "session_id": "placeholder-session-id",
-        "status": "uploaded",
-        "message": "简历已上传，正在解析...",
+        "code": 0,
+        "message": "简历已上传，正在解析",
+        "data": {
+            "session_id": str(session_id),
+            "task_id": task.id,
+            "status": "parsing",
+        },
     }
 
 
@@ -41,17 +90,74 @@ async def get_session_status(
 ) -> Dict[str, Any]:
     """查询会话解析进度
 
-    Args:
-        session_id: 会话 ID
-        db: 数据库会话
-
-    Returns:
-        会话状态和解析进度
+    前端轮询此接口，直到 status 变为 parsed 或 failed。
     """
-    # TODO: 从数据库查询会话状态
+    result = await db.execute(
+        select(Session).where(Session.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail={
+            "code": 1002,
+            "message": "会话不存在",
+        })
+
+    data = {
+        "session_id": str(session.id),
+        "status": session.status.value,
+        "progress": session.progress,
+    }
+
+    # 解析完成时附带结果摘要
+    if session.status == SessionStatus.PARSED:
+        data["parsed_at"] = session.parsed_at.isoformat() if session.parsed_at else None
+
+    if session.status == SessionStatus.FAILED:
+        data["error"] = session.parse_error
+
     return {
-        "session_id": session_id,
-        "status": "parsing",
-        "progress": 0.5,
-        "message": "正在解析简历...",
+        "code": 0,
+        "message": "success",
+        "data": data,
+    }
+
+
+@router.get("/sessions/{session_id}/parse")
+async def get_parse_result(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """获取简历解析结果
+
+    解析完成后返回结构化数据，供前端展示和用户修正。
+    """
+    result = await db.execute(
+        select(Session).where(Session.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail={
+            "code": 1002,
+            "message": "会话不存在",
+        })
+
+    if session.status not in (SessionStatus.PARSED, SessionStatus.DIAGNOSING, SessionStatus.DIAGNOSED, SessionStatus.INTERVIEWING, SessionStatus.COMPLETED):
+        raise HTTPException(status_code=400, detail={
+            "code": 1003,
+            "message": f"解析尚未完成，当前状态: {session.status.value}",
+        })
+
+    import json
+    parsed_data = json.loads(session.parsed_content) if session.parsed_content else {}
+
+    return {
+        "code": 0,
+        "message": "success",
+        "data": {
+            "session_id": str(session.id),
+            "status": session.status.value,
+            "parsed_data": parsed_data,
+        },
     }
