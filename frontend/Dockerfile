@@ -1,5 +1,5 @@
 # 阶段1：构建
-FROM registry.cn-hangzhou.aliyuncs.com/library/node:20-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ COPY . .
 RUN npm run build
 
 # 阶段2：Nginx 部署
-FROM registry.cn-hangzhou.aliyuncs.com/library/nginx:alpine
+FROM nginx:alpine
 
 # 复制 nginx 配置
 COPY nginx.conf /etc/nginx/conf.d/default.conf
