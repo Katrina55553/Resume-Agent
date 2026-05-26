@@ -17,6 +17,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    volumes:
+      - uploads:/app/uploads
     env_file:
       - ./backend/.env
     depends_on:
@@ -32,6 +34,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: celery -A app.tasks.celery_app worker --loglevel=info -Q parse,report,default
+    volumes:
+      - uploads:/app/uploads
     env_file:
       - ./backend/.env
     depends_on:
@@ -72,3 +76,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  uploads:
