@@ -84,7 +84,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   },
 
   sendAnswer: async (content: string) => {
-    const { sessionId, messages } = get();
+    const { sessionId, messages, pointStates } = get();
     if (!sessionId) return;
 
     // 先添加用户消息到 UI
@@ -106,9 +106,12 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
           progress: 1,
         });
       } else {
+        const updatedStates = data.point_states
+          ? pointStates.map(p => ({ ...p, status: data.point_states[p.id] || p.status }))
+          : pointStates;
         set({
           messages: [...get().messages, { role: 'assistant', content: data.question }],
-          pointStates: data.point_states || get().pointStates,
+          pointStates: updatedStates,
           currentPointId: data.point_id,
           currentRound: data.round || get().currentRound,
           progress: data.progress || get().progress,
@@ -121,7 +124,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   },
 
   skipQuestion: async () => {
-    const { sessionId, messages } = get();
+    const { sessionId, messages, pointStates } = get();
     if (!sessionId) return;
 
     try {
@@ -136,9 +139,13 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
           progress: 1,
         });
       } else {
+        // point_states 是字典 {id: status}，需要合并到现有数组
+        const updatedStates = data.point_states
+          ? pointStates.map(p => ({ ...p, status: data.point_states[p.id] || p.status }))
+          : pointStates;
         set({
           messages: [...messages, { role: 'assistant', content: `[跳过] ${data.question}` }],
-          pointStates: data.point_states || get().pointStates,
+          pointStates: updatedStates,
           currentPointId: data.point_id,
           currentRound: 1,
           progress: data.progress || get().progress,
