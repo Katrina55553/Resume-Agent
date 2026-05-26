@@ -43,24 +43,30 @@ export const useDiagnoseStore = create<DiagnoseState>((set, get) => ({
 
   fetchDiagnose: async (sessionId: string) => {
     set({ status: 'loading', error: null });
-    try {
-      const res = await api.get(`/sessions/${sessionId}/diagnose`);
-      const data = res.data.data;
 
-      if (data.status === 'diagnosing') {
-        // 还在诊断中，不更新结果
-        return;
+    const poll = async () => {
+      try {
+        const res = await api.get(`/sessions/${sessionId}/diagnose`);
+        const data = res.data.data;
+
+        if (data.status === 'diagnosing') {
+          // 还在诊断中，2秒后重试
+          setTimeout(poll, 2000);
+          return;
+        }
+
+        set({
+          result: data.result,
+          selectedIds: data.result?.doubt_points?.map((p: DoubtPoint) => p.id) || [],
+          status: 'done',
+        });
+      } catch (err: any) {
+        const msg = err.response?.data?.detail?.message || err.message || '获取诊断结果失败';
+        set({ status: 'error', error: msg });
       }
+    };
 
-      set({
-        result: data.result,
-        selectedIds: data.result?.doubt_points?.map((p: DoubtPoint) => p.id) || [],
-        status: 'done',
-      });
-    } catch (err: any) {
-      const msg = err.response?.data?.detail?.message || err.message || '获取诊断结果失败';
-      set({ status: 'error', error: msg });
-    }
+    await poll();
   },
 
   togglePoint: (id: string) => {
