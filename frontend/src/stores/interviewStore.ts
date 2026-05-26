@@ -67,7 +67,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     set({ status: 'loading', error: null, sessionId });
     try {
       const res = await api.post(`/sessions/${sessionId}/interview/start`);
-      const data = res.data.data;
+      const data = res.data.data || res.data;
 
       set({
         status: 'active',
@@ -96,9 +96,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       const res = await api.post(`/sessions/${sessionId}/interview/respond`, {
         content,
       });
-      const data = res.data.data;
+      const data = res.data.data || res.data;
 
-      if (data.status === 'complete') {
+      if (data.decision === 'report') {
         set({
           isComplete: true,
           status: 'complete',
@@ -107,10 +107,10 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         });
       } else {
         set({
-          messages: [...get().messages, { role: 'assistant', content: data.next_question }],
+          messages: [...get().messages, { role: 'assistant', content: data.question }],
           pointStates: data.point_states || get().pointStates,
-          currentPointId: data.current_point_id,
-          currentRound: data.current_round || get().currentRound,
+          currentPointId: data.point_id,
+          currentRound: data.round || get().currentRound,
           progress: data.progress || get().progress,
         });
       }
@@ -126,9 +126,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
 
     try {
       const res = await api.post(`/sessions/${sessionId}/interview/skip`);
-      const data = res.data.data;
+      const data = res.data.data || res.data;
 
-      if (data.status === 'complete') {
+      if (data.decision === 'report') {
         set({
           isComplete: true,
           status: 'complete',
@@ -137,9 +137,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         });
       } else {
         set({
-          messages: [...messages, { role: 'assistant', content: `[跳过] ${data.next_question}` }],
+          messages: [...messages, { role: 'assistant', content: `[跳过] ${data.question}` }],
           pointStates: data.point_states || get().pointStates,
-          currentPointId: data.current_point_id,
+          currentPointId: data.point_id,
           currentRound: 1,
           progress: data.progress || get().progress,
         });
@@ -155,7 +155,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
 
     try {
       const res = await api.post(`/sessions/${sessionId}/interview/rephrase`);
-      const data = res.data.data;
+      const data = res.data.data || res.data;
 
       set({
         messages: [...messages, { role: 'assistant', content: data.question }],
@@ -169,7 +169,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     set({ status: 'loading', error: null, sessionId });
     try {
       const res = await api.get(`/sessions/${sessionId}/interview/resume`);
-      const data = res.data.data;
+      const data = res.data.data || res.data;
 
       const messages: ChatMessage[] = data.messages || [];
 
