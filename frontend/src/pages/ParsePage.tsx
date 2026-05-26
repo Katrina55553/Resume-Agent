@@ -7,6 +7,7 @@ interface ResumeData {
   phone?: string;
   email?: string;
   summary?: string;
+  raw_text?: string;
   work_experience: Array<{
     company: string;
     position: string;
@@ -123,7 +124,7 @@ export default function ParsePage() {
           <div className="bg-white rounded-xl shadow-sm border p-6">
             <h2 className="text-lg font-semibold mb-4 text-gray-700">简历原文</h2>
             <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-600 whitespace-pre-wrap max-h-[600px] overflow-y-auto">
-              {data.summary || '（原文预览暂不可用）'}
+              {data.raw_text || data.summary || '（原文预览暂不可用）'}
             </div>
           </div>
 
