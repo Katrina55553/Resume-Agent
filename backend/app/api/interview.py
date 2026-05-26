@@ -62,6 +62,26 @@ def _build_point_states(doubt_points: List[dict]) -> Dict[str, str]:
     return states
 
 
+def _build_point_state_list(
+    doubt_points: List[dict],
+    point_states: Dict[str, str],
+) -> List[dict]:
+    """将存疑点 + 状态字典合并为前端需要的完整列表。
+
+    返回 [{id, source_text, priority, status}, ...]
+    """
+    result = []
+    for i, point in enumerate(doubt_points):
+        pid = point.get("id", f"point_{i}")
+        result.append({
+            "id": pid,
+            "source_text": point.get("source_text", ""),
+            "priority": point.get("priority", "low"),
+            "status": point_states.get(pid, "pending"),
+        })
+    return result
+
+
 async def _load_interview_state(
     db: AsyncSession,
     session_id: str,
@@ -321,6 +341,7 @@ async def start_interview(
         point_id=point_id,
         round=1,
         total_points=len(doubt_points),
+        point_list=_build_point_state_list(doubt_points, point_states),
     )
 
 
@@ -681,15 +702,19 @@ async def resume_interview(
             except (json.JSONDecodeError, TypeError):
                 pass
 
+    doubt_points = state.get("doubt_points", [])
+    point_states = state.get("point_states", {})
+
     return InterviewResumeResponse(
         session_id=str(session_id),
         current_point_index=state.get("current_point_index", 0),
         current_round=state.get("current_round", 1),
-        point_states=state.get("point_states", {}),
+        point_states=point_states,
         messages=state.get("messages", []),
         is_completed=state.get("is_completed", False),
         report=report,
-        total_points=len(state.get("doubt_points", [])),
+        total_points=len(doubt_points),
         current_question=current_question,
         current_point_id=point_id,
+        point_list=_build_point_state_list(doubt_points, point_states),
     )

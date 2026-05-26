@@ -51,6 +51,25 @@ interface InterviewState {
   reset: () => void;
 }
 
+/** 将后端返回的 point_list 映射为 PointState[] */
+function mapPointList(pointList: any[] | undefined, fallback: PointState[]): PointState[] {
+  if (pointList && Array.isArray(pointList)) {
+    return pointList.map((p: any) => ({
+      id: p.id,
+      source_text: p.source_text || '',
+      priority: p.priority || 'low',
+      status: p.status || 'pending',
+    }));
+  }
+  return fallback;
+}
+
+/** 将 point_states 字典合并到现有数组 */
+function mergePointStates(existing: PointState[], states: Record<string, string> | undefined): PointState[] {
+  if (!states) return existing;
+  return existing.map(p => ({ ...p, status: (states[p.id] as any) || p.status }));
+}
+
 export const useInterviewStore = create<InterviewState>((set, get) => ({
   sessionId: null,
   messages: [],
@@ -72,12 +91,32 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       set({
         status: 'active',
         messages: [{ role: 'assistant', content: data.first_question }],
-        pointStates: data.point_states || [],
-        currentPointId: data.current_point_id,
+        pointStates: mapPointList(data.point_list, []),
+        currentPointId: data.point_id,
         currentRound: 1,
         progress: 0,
       });
     } catch (err: any) {
+      // 如果是 400（面试已存在），尝试 resume
+      if (err.response?.status === 400) {
+        try {
+          const resumeRes = await api.get(`/sessions/${sessionId}/interview/resume`);
+          const rData = resumeRes.data.data || resumeRes.data;
+          set({
+            status: rData.is_complete ? 'complete' : 'active',
+            messages: rData.messages || [],
+            pointStates: mapPointList(rData.point_list, []),
+            currentPointId: rData.current_point_id,
+            currentRound: rData.current_round || 1,
+            progress: rData.progress || 0,
+            isComplete: rData.is_complete || false,
+            report: rData.report || null,
+          });
+          return;
+        } catch {
+          // resume 也失败了，走正常错误处理
+        }
+      }
       const msg = err.response?.data?.detail?.message || err.message || '启动面试失败';
       set({ status: 'error', error: msg });
     }
@@ -106,9 +145,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
           progress: 1,
         });
       } else {
-        const updatedStates = data.point_states
-          ? pointStates.map(p => ({ ...p, status: data.point_states[p.id] || p.status }))
-          : pointStates;
+        const updatedStates = mergePointStates(pointStates, data.point_states);
         set({
           messages: [...get().messages, { role: 'assistant', content: data.question }],
           pointStates: updatedStates,
@@ -119,7 +156,11 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       }
     } catch (err: any) {
       const msg = err.response?.data?.detail?.message || err.message || '提交回答失败';
-      set({ error: msg });
+      // 不中断面试，在聊天中显示错误提示
+      set({
+        messages: [...get().messages, { role: 'assistant', content: `[系统] 回答提交失败：${msg}，请重试。` }],
+        error: msg,
+      });
     }
   },
 
@@ -139,10 +180,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
           progress: 1,
         });
       } else {
-        // point_states 是字典 {id: status}，需要合并到现有数组
-        const updatedStates = data.point_states
-          ? pointStates.map(p => ({ ...p, status: data.point_states[p.id] || p.status }))
-          : pointStates;
+        const updatedStates = mergePointStates(pointStates, data.point_states);
         set({
           messages: [...messages, { role: 'assistant', content: `[跳过] ${data.question}` }],
           pointStates: updatedStates,
@@ -178,12 +216,10 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       const res = await api.get(`/sessions/${sessionId}/interview/resume`);
       const data = res.data.data || res.data;
 
-      const messages: ChatMessage[] = data.messages || [];
-
       set({
         status: data.is_complete ? 'complete' : 'active',
-        messages,
-        pointStates: data.point_states || [],
+        messages: data.messages || [],
+        pointStates: mapPointList(data.point_list, []),
         currentPointId: data.current_point_id,
         currentRound: data.current_round || 1,
         progress: data.progress || 0,

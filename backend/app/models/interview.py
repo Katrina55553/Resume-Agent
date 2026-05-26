@@ -104,6 +104,7 @@ class InterviewStartResponse(BaseModel):
     point_id: str
     round: int = 1
     total_points: int
+    point_list: Optional[List[Dict]] = None
 
 
 class InterviewRespondRequest(BaseModel):
@@ -135,6 +136,7 @@ class InterviewResumeResponse(BaseModel):
     total_points: int
     current_question: Optional[str] = None
     current_point_id: Optional[str] = None
+    point_list: Optional[List[Dict]] = None
 
 
 class WSIncomingMessage(BaseModel):
