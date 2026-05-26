@@ -25,7 +25,7 @@ export default function InterviewPage() {
   const {
     messages, pointStates, currentPointId, currentRound,
     progress, isComplete, report, status, error,
-    startInterview, sendAnswer, skipQuestion, rephraseQuestion,
+    startInterview, sendAnswer, skipQuestion,
   } = useInterviewStore();
 
   const [input, setInput] = useState('');
@@ -73,12 +73,6 @@ export default function InterviewPage() {
     await skipQuestion();
     setIsSending(false);
   }, [skipQuestion]);
-
-  const handleRephrase = useCallback(async () => {
-    setIsSending(true);
-    await rephraseQuestion();
-    setIsSending(false);
-  }, [rephraseQuestion]);
 
   if (status === 'loading') {
     return (
@@ -182,13 +176,6 @@ export default function InterviewPage() {
                       className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 border rounded"
                     >
                       跳过
-                    </button>
-                    <button
-                      onClick={handleRephrase}
-                      disabled={isSending}
-                      className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 border rounded"
-                    >
-                      换问法
                     </button>
                   </div>
                 </div>
