@@ -1,82 +1,73 @@
 """报告路由
 
-处理面试报告生成和查询。
+查询面试评估报告。
 """
 
+import json
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import Dict, Any
 
 from app.core.database import get_db
+from app.models.session import Session, SessionStatus
+from app.models.interview import InterviewStateORM
 
 router = APIRouter()
 
 
-@router.post("/report/{interview_id}/generate")
-async def generate_report(
-    interview_id: str,
-    db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
-    """生成面试报告
-
-    Args:
-        interview_id: 面试 ID
-        db: 数据库会话
-
-    Returns:
-        报告生成任务信息
-    """
-    # TODO: 启动异步报告生成任务
-    return {
-        "interview_id": interview_id,
-        "report_id": "placeholder-report-id",
-        "status": "generating",
-        "message": "报告生成中...",
-    }
-
-
-@router.get("/report/{report_id}")
+@router.get("/sessions/{session_id}/report")
 async def get_report(
-    report_id: str,
+    session_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """获取面试报告
+    """获取面试评估报告
 
-    Args:
-        report_id: 报告 ID
-        db: 数据库会话
-
-    Returns:
-        报告内容
+    从 InterviewStateORM 中读取 report 字段。
     """
-    # TODO: 从数据库获取报告
+    result = await db.execute(
+        select(Session).where(Session.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail={
+            "code": 1002,
+            "message": "会话不存在",
+        })
+
+    # 获取面试状态
+    intv_result = await db.execute(
+        select(InterviewStateORM).where(InterviewStateORM.session_id == session_id)
+    )
+    interview = intv_result.scalar_one_or_none()
+
+    if not interview:
+        raise HTTPException(status_code=404, detail={
+            "code": 1004,
+            "message": "面试记录不存在",
+        })
+
+    if not interview.is_completed:
+        return {
+            "code": 0,
+            "message": "面试尚未完成",
+            "data": {
+                "session_id": session_id,
+                "status": "interviewing",
+            },
+        }
+
+    report = interview.report or {}
+
     return {
-        "report_id": report_id,
-        "status": "completed",
-        "summary": "placeholder-summary",
-        "scores": {
-            "technical": 80,
-            "communication": 75,
-            "problem_solving": 70,
+        "code": 0,
+        "message": "success",
+        "data": {
+            "session_id": session_id,
+            "status": "completed",
+            "report": report,
         },
-        "feedback": "placeholder-feedback",
     }
-
-
-@router.get("/report/{report_id}/download")
-async def download_report(
-    report_id: str,
-    db: AsyncSession = Depends(get_db),
-) -> FileResponse:
-    """下载报告文件
-
-    Args:
-        report_id: 报告 ID
-        db: 数据库会话
-
-    Returns:
-        报告文件
-    """
-    # TODO: 生成或获取报告文件
-    raise HTTPException(status_code=501, detail="报告下载功能尚未实现")
