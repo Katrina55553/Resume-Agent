@@ -46,5 +46,7 @@ celery_app.conf.update(
     task_default_queue="default",
 )
 
-# 自动发现任务
-celery_app.autodiscover_tasks(["app.tasks"])
+# 显式导入任务模块（autodiscover 只找 tasks.py，找不到 parse_task.py）
+import app.tasks.parse_task  # noqa: F401
+import app.tasks.diagnose_task  # noqa: F401
+import app.tasks.report_task  # noqa: F401
