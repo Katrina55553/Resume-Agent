@@ -80,10 +80,13 @@ def _extract_text(file_path: str) -> str:
 # ── LLM 结构化解析 ────────────────────────────────────────
 
 def _llm_parse(raw_text: str) -> dict:
-    """调用 Claude API 进行结构化解析"""
-    import anthropic
+    """调用 LLM API 进行结构化解析（OpenAI 兼容格式）"""
+    from openai import OpenAI
 
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = OpenAI(
+        api_key=settings.LLM_API_KEY,
+        base_url=settings.LLM_BASE_URL,
+    )
 
     prompt = f"""你是简历解析专家。请从以下简历原文中提取结构化信息，返回 JSON 格式。
 
@@ -100,13 +103,13 @@ def _llm_parse(raw_text: str) -> dict:
 简历原文：
 {raw_text[:4000]}"""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
+    response = client.chat.completions.create(
+        model=settings.LLM_MODEL,
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
 
-    response_text = message.content[0].text.strip()
+    response_text = response.choices[0].message.content.strip()
     # 提取 JSON（兼容 ```json ... ``` 包裹）
     json_match = re.search(r"\{[\s\S]*\}", response_text)
     if json_match:
@@ -210,7 +213,7 @@ def _parse_resume(file_path: str) -> dict:
         raise ValueError("文件内容为空或无法提取文本")
 
     # 有 API key 用 LLM，否则用规则
-    if settings.ANTHROPIC_API_KEY:
+    if settings.LLM_API_KEY:
         try:
             result = _llm_parse(raw_text)
         except Exception:
