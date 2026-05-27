@@ -2,9 +2,10 @@ FROM python:3-slim
 
 WORKDIR /app
 
-# 安装系统依赖（python-magic 需要 libmagic）
+# 安装系统依赖（python-magic 需要 libmagic，psycopg2 需要 libpq-dev）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件并安装
