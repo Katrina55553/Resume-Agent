@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # 前端：Nginx 代理 + 静态文件
   frontend:
