@@ -4,9 +4,33 @@ import { useSessionStore } from '../stores/sessionStore';
 import FileDropzone from '../components/Upload/FileDropzone';
 import UploadProgress from '../components/Upload/UploadProgress';
 
+const FEATURES = [
+  {
+    icon: '🔍',
+    title: 'AI 简历诊断',
+    desc: '智能识别简历中的存疑点，标注高/中/低优先级',
+  },
+  {
+    icon: '🎯',
+    title: '模拟面试',
+    desc: '基于 LangGraph 状态机的多轮追问，验证简历真实性',
+  },
+  {
+    icon: '📊',
+    title: '量化评估',
+    desc: '可信度评分 + 逐点反馈 + 改进建议',
+  },
+];
+
+const STEPS = [
+  { step: '01', title: '上传简历', desc: '支持 PDF / Word / TXT' },
+  { step: '02', title: 'AI 解析', desc: '结构化提取关键信息' },
+  { step: '03', title: '诊断报告', desc: '识别存疑点与改进空间' },
+  { step: '04', title: '模拟面试', desc: '多轮追问验证真实性' },
+];
+
 /**
  * 首页 — 上传简历
- * 文件选择 → 上传 → 轮询进度 → 自动跳转到解析确认页
  */
 export default function HomePage() {
   const navigate = useNavigate();
@@ -19,7 +43,6 @@ export default function HomePage() {
   const isParsing = status === 'parsing';
   const isBusy = isUploading || isParsing;
 
-  // 解析完成，自动跳转
   useEffect(() => {
     if (status === 'parsed' && sessionId) {
       const timer = setTimeout(() => {
@@ -29,7 +52,6 @@ export default function HomePage() {
     }
   }, [status, sessionId, navigate]);
 
-  // 组件卸载时停止轮询
   useEffect(() => {
     return () => stopPolling();
   }, [stopPolling]);
@@ -48,57 +70,110 @@ export default function HomePage() {
   }, [reset]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 relative">
-      {/* GitHub 链接 */}
-      <a
-        href="https://github.com/Katrina55553/resume-agent"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition"
-        title="GitHub"
-      >
-        <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-        </svg>
-      </a>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      {/* 导航栏 */}
+      <nav className="flex items-center justify-between px-8 py-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
+            <span className="text-white text-sm font-bold">AI</span>
+          </div>
+          <span className="text-lg font-bold text-gray-800">简历智诊</span>
+        </div>
+        <a
+          href="https://github.com/Katrina55553/resume-agent"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-gray-400 hover:text-gray-700 transition"
+          title="GitHub"
+        >
+          <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+        </a>
+      </nav>
 
-      <div className="w-full max-w-lg">
-        {/* 标题 */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            AI 简历诊断 + 模拟面试
+      {/* Hero 区域 */}
+      <div className="max-w-6xl mx-auto px-6 pt-12 pb-16">
+        <div className="text-center mb-12">
+          <div className="inline-block mb-4 px-4 py-1.5 rounded-full bg-blue-100 text-blue-700 text-sm font-medium">
+            🚀 AI 驱动 · DeepSeek + LangGraph + RAG
+          </div>
+          <h1 className="text-5xl font-bold text-gray-900 mb-4 leading-tight">
+            AI 简历诊断
+            <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"> + </span>
+            模拟面试
           </h1>
-          <p className="text-gray-500">
-            上传你的简历，开始智能诊断与模拟面试
+          <p className="text-lg text-gray-500 max-w-2xl mx-auto">
+            上传简历 → AI 深度诊断 → 多轮模拟面试 → 量化评估报告
           </p>
         </div>
 
-        {/* 上传区域 / 进度条 */}
-        {isBusy || status === 'failed' ? (
-          <UploadProgress
-            fileName={fileName || ''}
-            progress={progress}
-            status={status}
-            error={error}
-            onRetry={status === 'failed' ? handleRetry : undefined}
-          />
-        ) : status === 'parsed' ? (
-          <div className="text-center rounded-2xl bg-green-50 border border-green-200 p-8">
-            <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
-              <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-              </svg>
-            </div>
-            <p className="text-green-700 font-medium">解析完成，正在跳转...</p>
+        {/* 上传卡片 */}
+        <div className="max-w-xl mx-auto mb-16">
+          <div className="bg-white rounded-2xl shadow-lg shadow-blue-100/50 border border-gray-100 p-8">
+            {isBusy || status === 'failed' ? (
+              <UploadProgress
+                fileName={fileName || ''}
+                progress={progress}
+                status={status}
+                error={error}
+                onRetry={status === 'failed' ? handleRetry : undefined}
+              />
+            ) : status === 'parsed' ? (
+              <div className="text-center py-4">
+                <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-7 h-7 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                  </svg>
+                </div>
+                <p className="text-green-700 font-medium text-lg">解析完成，正在跳转...</p>
+              </div>
+            ) : (
+              <FileDropzone
+                onFileSelected={handleFileSelected}
+                disabled={false}
+              />
+            )}
           </div>
-        ) : (
-          <FileDropzone
-            onFileSelected={handleFileSelected}
-            disabled={false}
-          />
-        )}
+        </div>
 
+        {/* 功能亮点 */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+          {FEATURES.map((f) => (
+            <div
+              key={f.title}
+              className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="text-3xl mb-3">{f.icon}</div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">{f.title}</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* 流程步骤 */}
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">使用流程</h2>
+          <p className="text-gray-500">四步完成简历诊断与模拟面试</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {STEPS.map((s, i) => (
+            <div key={s.step} className="relative text-center">
+              <div className="text-4xl font-bold text-blue-100 mb-2">{s.step}</div>
+              <h4 className="font-semibold text-gray-800 mb-1">{s.title}</h4>
+              <p className="text-sm text-gray-500">{s.desc}</p>
+              {i < STEPS.length - 1 && (
+                <div className="hidden md:block absolute top-6 -right-3 w-6 text-gray-200 text-xl">→</div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
+
+      {/* 底部 */}
+      <footer className="text-center py-6 text-sm text-gray-400">
+        © 2026 简历智诊 Agent · Powered by DeepSeek + LangGraph
+      </footer>
     </div>
   );
 }
