@@ -17,6 +17,7 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.models.session import Session, SessionStatus
 from app.utils.security.file_upload import validate_upload_file
+from app.utils.security.masking import mask_phone, mask_email, mask_name
 from app.tasks.parse_task import parse_resume
 
 router = APIRouter()
@@ -151,6 +152,14 @@ async def get_parse_result(
 
     import json
     parsed_data = json.loads(session.parsed_content) if session.parsed_content else {}
+
+    # 脱敏敏感字段（安全网：防止解析器遗漏）
+    if parsed_data.get("phone"):
+        parsed_data["phone"] = mask_phone(str(parsed_data["phone"]))
+    if parsed_data.get("email"):
+        parsed_data["email"] = mask_email(str(parsed_data["email"]))
+    if parsed_data.get("name"):
+        parsed_data["name"] = mask_name(str(parsed_data["name"]))
 
     return {
         "code": 0,

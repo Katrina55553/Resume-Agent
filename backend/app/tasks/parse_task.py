@@ -17,7 +17,9 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.tasks.celery_app import celery_app
 from app.core.config import settings
+from app.core.llm import call_llm_json
 from app.models.session import Session, SessionStatus
+from app.utils.security.masking import mask_phone, mask_email, mask_id_card
 
 # 延迟创建同步引擎
 _sync_engine = None
@@ -79,41 +81,54 @@ def _extract_text(file_path: str) -> str:
 
 # ── LLM 结构化解析 ────────────────────────────────────────
 
-def _llm_parse(raw_text: str) -> dict:
-    """调用 LLM API 进行结构化解析（OpenAI 兼容格式）"""
-    from openai import OpenAI
-
-    client = OpenAI(
-        api_key=settings.LLM_API_KEY,
-        base_url=settings.LLM_BASE_URL,
+def _mask_raw_text(text: str) -> str:
+    """脱敏简历原文中的手机号、邮箱、身份证号（发送给 LLM 前调用）"""
+    # 手机号：13812345678 → 138****5678
+    text = re.sub(
+        r"(1[3-9]\d)\d{4}(\d{4})",
+        lambda m: m.group(1) + "****" + m.group(2),
+        text,
     )
+    # 邮箱：zhangsan@example.com → z***n@example.com
+    def _mask_email_match(m):
+        local, domain = m.group(1), m.group(2)
+        if len(local) <= 2:
+            masked = "*" * len(local)
+        else:
+            masked = local[0] + "***" + local[-1]
+        return f"{masked}@{domain}"
+    text = re.sub(r"([\w.+-]+)@([\w-]+\.[\w.-]+)", _mask_email_match, text)
+    # 身份证号
+    text = re.sub(
+        r"(\d{4})\d{10}(\d{4})",
+        lambda m: m.group(1) + "**********" + m.group(2),
+        text,
+    )
+    return text
 
-    prompt = f"""你是简历解析专家。请从以下简历原文中提取结构化信息，返回 JSON 格式。
+
+def _llm_parse(raw_text: str) -> dict:
+    """调用 LLM API 进行结构化解析"""
+    masked_text = _mask_raw_text(raw_text[:4000])
+
+    result = call_llm_json(
+        system_prompt="你是简历解析专家。只返回 JSON，不要其他文字。",
+        user_prompt=f"""请从以下简历原文中提取结构化信息。
 
 要求：
-- 只返回 JSON，不要其他文字
 - 字段：name, phone, email, summary, work_experience(数组), education(数组), projects(数组), skills(数组), certifications(数组)
 - work_experience 每项：company, position, start_date, end_date, description, achievements(数组)
 - education 每项：school, degree, major, start_date, end_date
 - projects 每项：name, role, description, technologies(数组), achievements(数组)
 - skills 每项：category, skills(数组)
-- 手机号脱敏（中间4位用****替代）
+- 手机号已脱敏，保持原样即可
 - 如某字段信息缺失用 null 或空数组
 
 简历原文：
-{raw_text[:4000]}"""
-
-    response = client.chat.completions.create(
-        model=settings.LLM_MODEL,
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
+{masked_text}""",
     )
-
-    response_text = response.choices[0].message.content.strip()
-    # 提取 JSON（兼容 ```json ... ``` 包裹）
-    json_match = re.search(r"\{[\s\S]*\}", response_text)
-    if json_match:
-        return json.loads(json_match.group())
+    if result:
+        return result
     raise ValueError("LLM 返回内容无法解析为 JSON")
 
 
@@ -217,13 +232,12 @@ def _parse_resume(file_path: str) -> dict:
         try:
             result = _llm_parse(raw_text)
         except Exception:
-            # LLM 失败降级到规则解析
             result = _rule_based_parse(raw_text)
     else:
         result = _rule_based_parse(raw_text)
 
-    # 保留原始文本
-    result["raw_text"] = raw_text[:2000]
+    # raw_text 脱敏后存储（保护用户隐私）
+    result["raw_text"] = _mask_raw_text(raw_text[:2000])
     return result
 
 
