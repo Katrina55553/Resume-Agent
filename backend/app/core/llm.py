@@ -103,6 +103,44 @@ def is_llm_available() -> bool:
     return bool(settings.LLM_API_KEY)
 
 
+def _parse_tool_calls_from_text(content: str) -> List[Dict[str, Any]]:
+    """从文本内容中解析工具调用（兼容 DeepSeek 等不支持结构化 tool_calls 的模型）。
+
+    DeepSeek 可能把工具调用输出为文本：
+    <｜tool_calls｜><｜tool_call｜>func_name({"arg": "val"})<｜/tool_call｜><｜/tool_calls｜>
+    或普通格式：
+    <tool_call>func_name({"arg": "val"})</tool_call>
+    """
+    tool_calls = []
+
+    # 尝试多种格式
+    patterns = [
+        # DeepSeek 格式：<｜tool_call｜>name({...})<｜/tool_call｜>
+        r'<｜tool_call｜>(\w+)\((\{.*?\})\)<｜/tool_call｜>',
+        # 通用 XML 格式：<tool_call>name({...})</tool_call>
+        r'<tool_call>(\w+)\((\{.*?\})\)</tool_call>',
+        # 简单格式：name({"arg": "val"})
+        r'(search_knowledge_base|lookup_resume_field|verify_code_snippet)\((\{[^)]+\})\)',
+    ]
+
+    for pattern in patterns:
+        matches = re.findall(pattern, content, re.DOTALL)
+        if matches:
+            for i, (func_name, args_str) in enumerate(matches):
+                try:
+                    args = json.loads(args_str)
+                except json.JSONDecodeError:
+                    args = {}
+                tool_calls.append({
+                    "id": f"call_{i}",
+                    "name": func_name,
+                    "arguments": args,
+                })
+            break
+
+    return tool_calls
+
+
 def call_llm_with_tools(
     system_prompt: str,
     user_prompt: str,
@@ -111,6 +149,9 @@ def call_llm_with_tools(
     max_tokens: int = 2048,
 ) -> Tuple[Optional[str], List[Dict[str, Any]]]:
     """调用 LLM 并支持 Tool Calling。
+
+    先尝试结构化 tool_calls（OpenAI 格式），
+    如果模型不支持则从文本内容中解析工具调用（DeepSeek 兼容）。
 
     Returns:
         (content, tool_calls) 元组：
@@ -139,7 +180,7 @@ def call_llm_with_tools(
         message = response.choices[0].message
         content = message.content or ""
 
-        # 解析工具调用
+        # 优先：结构化 tool_calls（OpenAI 原生格式）
         tool_calls = []
         if message.tool_calls:
             for tc in message.tool_calls:
@@ -152,6 +193,17 @@ def call_llm_with_tools(
                     "name": tc.function.name,
                     "arguments": args,
                 })
+
+        # 降级：从文本内容中解析工具调用（DeepSeek 兼容）
+        if not tool_calls and content:
+            tool_calls = _parse_tool_calls_from_text(content)
+            if tool_calls:
+                # 去掉内容中的工具调用标记，保留纯文本
+                for pattern in [
+                    r'<｜tool_calls｜>.*?<｜/tool_calls｜>',
+                    r'<tool_call>.*?</tool_call>',
+                ]:
+                    content = re.sub(pattern, '', content, flags=re.DOTALL).strip()
 
         return content.strip() if content else "", tool_calls
 
