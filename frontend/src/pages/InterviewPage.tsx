@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import Markdown from 'react-markdown';
 import { useInterviewStore, type ChatMessage } from '../stores/interviewStore';
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -241,13 +242,17 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           {isUser ? '你' : '面试官'}
         </div>
         <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
             isUser
-              ? 'bg-blue-600 text-white rounded-br-md'
-              : 'bg-white border text-gray-700 rounded-bl-md shadow-sm'
+              ? 'bg-blue-600 text-white rounded-br-md whitespace-pre-wrap'
+              : 'bg-white border text-gray-700 rounded-bl-md shadow-sm prose prose-sm max-w-none'
           }`}
         >
-          {message.content}
+          {isUser ? (
+            message.content
+          ) : (
+            <Markdown>{message.content}</Markdown>
+          )}
         </div>
       </div>
     </div>
