@@ -16,20 +16,18 @@ const STATUS_LABELS: Record<string, { text: string; color: string }> = {
 };
 
 /**
- * 步骤3：模拟面试页
- * 左侧对话区 + 右侧状态面板 + 底部输入框
+ * 步骤3：模拟面试页（WebSocket 实时通信）
  */
 export default function InterviewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
     messages, pointStates, currentPointId, currentRound,
-    progress, isComplete, report, status, error,
-    startInterview, sendAnswer, skipQuestion,
+    progress, isComplete, report, status, error, wsConnected,
+    startInterview, sendAnswer, skipQuestion, rephraseQuestion,
   } = useInterviewStore();
 
   const [input, setInput] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 启动面试
@@ -52,14 +50,12 @@ export default function InterviewPage() {
     }
   }, [isComplete, report, id, navigate]);
 
-  const handleSend = useCallback(async () => {
+  const handleSend = useCallback(() => {
     const text = input.trim();
-    if (!text || isSending) return;
+    if (!text || !wsConnected) return;
     setInput('');
-    setIsSending(true);
-    await sendAnswer(text);
-    setIsSending(false);
-  }, [input, isSending, sendAnswer]);
+    sendAnswer(text);
+  }, [input, wsConnected, sendAnswer]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -68,11 +64,15 @@ export default function InterviewPage() {
     }
   }, [handleSend]);
 
-  const handleSkip = useCallback(async () => {
-    setIsSending(true);
-    await skipQuestion();
-    setIsSending(false);
-  }, [skipQuestion]);
+  const handleSkip = useCallback(() => {
+    if (!wsConnected) return;
+    skipQuestion();
+  }, [wsConnected, skipQuestion]);
+
+  const handleRephrase = useCallback(() => {
+    if (!wsConnected) return;
+    rephraseQuestion();
+  }, [wsConnected, rephraseQuestion]);
 
   if (status === 'loading') {
     return (
@@ -105,7 +105,12 @@ export default function InterviewPage() {
         <button onClick={() => navigate(`/session/${id}/diagnose`)} className="text-gray-500 hover:text-gray-700">
           ← 返回诊断
         </button>
-        <span className="text-sm text-gray-400">步骤 3/4 · 模拟面试</span>
+        <div className="flex items-center gap-3">
+          {/* WebSocket 连接状态 */}
+          <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-400'}`}
+            title={wsConnected ? '实时连接中' : '连接断开'} />
+          <span className="text-sm text-gray-400">步骤 3/4 · 模拟面试</span>
+        </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -127,23 +132,12 @@ export default function InterviewPage() {
             {messages.map((msg, i) => (
               <MessageBubble key={i} message={msg} />
             ))}
-            {isSending && (
-              <div className="flex items-center gap-2 text-gray-400 text-sm">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-                面试官正在思考...
-              </div>
-            )}
             <div ref={messagesEndRef} />
           </div>
 
           {/* 输入区 */}
           {!isComplete && (
             <div className="border-t bg-white px-6 py-4 shrink-0">
-              {/* 当前存疑点提示 */}
               {currentPoint && (
                 <div className="mb-3 flex items-center gap-2 text-xs text-gray-500">
                   <span className={`w-2 h-2 rounded-full ${PRIORITY_COLORS[currentPoint.priority]}`} />
@@ -159,12 +153,12 @@ export default function InterviewPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={isSending}
+                  disabled={!wsConnected}
                 />
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={handleSend}
-                    disabled={!input.trim() || isSending}
+                    disabled={!input.trim() || !wsConnected}
                     className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 transition"
                   >
                     发送
@@ -172,10 +166,17 @@ export default function InterviewPage() {
                   <div className="flex gap-1">
                     <button
                       onClick={handleSkip}
-                      disabled={isSending}
+                      disabled={!wsConnected}
                       className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 border rounded"
                     >
                       跳过
+                    </button>
+                    <button
+                      onClick={handleRephrase}
+                      disabled={!wsConnected}
+                      className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 border rounded"
+                    >
+                      换问法
                     </button>
                   </div>
                 </div>
@@ -195,7 +196,6 @@ export default function InterviewPage() {
         <div className="w-72 border-l bg-white p-5 overflow-y-auto shrink-0 hidden lg:block">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">面试状态</h3>
 
-          {/* 当前存疑点 */}
           {currentPoint && (
             <div className="mb-5 p-3 bg-blue-50 rounded-lg border border-blue-100">
               <div className="flex items-center gap-2 mb-1">
@@ -207,7 +207,6 @@ export default function InterviewPage() {
             </div>
           )}
 
-          {/* 存疑点状态列表 */}
           <div className="space-y-2">
             {pointStates.map((point) => {
               const label = STATUS_LABELS[point.status] || STATUS_LABELS.pending;
@@ -238,11 +237,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[75%] ${isUser ? 'order-2' : 'order-1'}`}>
-        {/* 角色标签 */}
         <div className={`text-xs text-gray-400 mb-1 ${isUser ? 'text-right' : ''}`}>
           {isUser ? '你' : '面试官'}
         </div>
-        {/* 消息内容 */}
         <div
           className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
             isUser

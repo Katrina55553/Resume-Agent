@@ -41,17 +41,26 @@ interface InterviewState {
   report: InterviewReport | null;
   status: 'idle' | 'loading' | 'active' | 'complete' | 'error';
   error: string | null;
+  wsConnected: boolean;
 
   // Actions
   startInterview: (sessionId: string) => Promise<void>;
-  sendAnswer: (content: string) => Promise<void>;
-  skipQuestion: () => Promise<void>;
-  rephraseQuestion: () => Promise<void>;
+  sendAnswer: (content: string) => void;
+  skipQuestion: () => void;
+  rephraseQuestion: () => void;
   resumeInterview: (sessionId: string) => Promise<void>;
+  _connectWs: (sessionId: string) => void;
+  disconnect: () => void;
   reset: () => void;
 }
 
-/** 将后端返回的 point_list 映射为 PointState[] */
+/** 构建 WebSocket URL */
+function getWsUrl(sessionId: string): string {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/ws/interview/${sessionId}`;
+}
+
+/** 将后端 point_list 映射为 PointState[] */
 function mapPointList(pointList: any[] | undefined, fallback: PointState[]): PointState[] {
   if (pointList && Array.isArray(pointList)) {
     return pointList.map((p: any) => ({
@@ -70,6 +79,8 @@ function mergePointStates(existing: PointState[], states: Record<string, string>
   return existing.map(p => ({ ...p, status: (states[p.id] as any) || p.status }));
 }
 
+let ws: WebSocket | null = null;
+
 export const useInterviewStore = create<InterviewState>((set, get) => ({
   sessionId: null,
   messages: [],
@@ -81,10 +92,12 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   report: null,
   status: 'idle',
   error: null,
+  wsConnected: false,
 
   startInterview: async (sessionId: string) => {
     set({ status: 'loading', error: null, sessionId });
     try {
+      // 1. REST 调用创建面试状态
       const res = await api.post(`/sessions/${sessionId}/interview/start`);
       const data = res.data.data || res.data;
 
@@ -96,117 +109,17 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         currentRound: 1,
         progress: 0,
       });
+
+      // 2. 连接 WebSocket
+      get()._connectWs(sessionId);
     } catch (err: any) {
-      // 如果是 400（面试已存在），尝试 resume
+      // 400 = 面试已存在，尝试 resume
       if (err.response?.status === 400) {
-        try {
-          const resumeRes = await api.get(`/sessions/${sessionId}/interview/resume`);
-          const rData = resumeRes.data.data || resumeRes.data;
-          set({
-            status: rData.is_complete ? 'complete' : 'active',
-            messages: rData.messages || [],
-            pointStates: mapPointList(rData.point_list, []),
-            currentPointId: rData.current_point_id,
-            currentRound: rData.current_round || 1,
-            progress: rData.progress || 0,
-            isComplete: rData.is_complete || false,
-            report: rData.report || null,
-          });
-          return;
-        } catch {
-          // resume 也失败了，走正常错误处理
-        }
+        await get().resumeInterview(sessionId);
+        return;
       }
       const msg = err.response?.data?.detail?.message || err.message || '启动面试失败';
       set({ status: 'error', error: msg });
-    }
-  },
-
-  sendAnswer: async (content: string) => {
-    const { sessionId, messages, pointStates } = get();
-    if (!sessionId) return;
-
-    // 先添加用户消息到 UI
-    set({
-      messages: [...messages, { role: 'user', content }],
-    });
-
-    try {
-      const res = await api.post(`/sessions/${sessionId}/interview/respond`, {
-        content,
-      });
-      const data = res.data.data || res.data;
-
-      if (data.decision === 'report') {
-        set({
-          isComplete: true,
-          status: 'complete',
-          report: data.report,
-          progress: 1,
-        });
-      } else {
-        const updatedStates = mergePointStates(pointStates, data.point_states);
-        set({
-          messages: [...get().messages, { role: 'assistant', content: data.question }],
-          pointStates: updatedStates,
-          currentPointId: data.point_id,
-          currentRound: data.round || get().currentRound,
-          progress: data.progress || get().progress,
-        });
-      }
-    } catch (err: any) {
-      const msg = err.response?.data?.detail?.message || err.message || '提交回答失败';
-      // 不中断面试，在聊天中显示错误提示
-      set({
-        messages: [...get().messages, { role: 'assistant', content: `[系统] 回答提交失败：${msg}，请重试。` }],
-        error: msg,
-      });
-    }
-  },
-
-  skipQuestion: async () => {
-    const { sessionId, messages, pointStates } = get();
-    if (!sessionId) return;
-
-    try {
-      const res = await api.post(`/sessions/${sessionId}/interview/skip`);
-      const data = res.data.data || res.data;
-
-      if (data.decision === 'report') {
-        set({
-          isComplete: true,
-          status: 'complete',
-          report: data.report,
-          progress: 1,
-        });
-      } else {
-        const updatedStates = mergePointStates(pointStates, data.point_states);
-        set({
-          messages: [...messages, { role: 'assistant', content: `[跳过] ${data.question}` }],
-          pointStates: updatedStates,
-          currentPointId: data.point_id,
-          currentRound: 1,
-          progress: data.progress || get().progress,
-        });
-      }
-    } catch (err: any) {
-      set({ error: err.message || '跳过失败' });
-    }
-  },
-
-  rephraseQuestion: async () => {
-    const { sessionId, messages } = get();
-    if (!sessionId) return;
-
-    try {
-      const res = await api.post(`/sessions/${sessionId}/interview/rephrase`);
-      const data = res.data.data || res.data;
-
-      set({
-        messages: [...messages, { role: 'assistant', content: data.question }],
-      });
-    } catch (err: any) {
-      set({ error: err.message || '换问法失败' });
     }
   },
 
@@ -216,9 +129,12 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       const res = await api.get(`/sessions/${sessionId}/interview/resume`);
       const data = res.data.data || res.data;
 
+      // 最后一条 assistant 消息作为当前问题
+      const messages: ChatMessage[] = data.messages || [];
+
       set({
         status: data.is_complete ? 'complete' : 'active',
-        messages: data.messages || [],
+        messages,
         pointStates: mapPointList(data.point_list, []),
         currentPointId: data.current_point_id,
         currentRound: data.current_round || 1,
@@ -226,21 +142,144 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         isComplete: data.is_complete || false,
         report: data.report || null,
       });
+
+      // 连接 WebSocket（未完成时）
+      if (!data.is_complete) {
+        get()._connectWs(sessionId);
+      }
     } catch (err: any) {
-      set({ status: 'error', error: err.message || '恢复面试失败' });
+      const msg = err.response?.data?.detail?.message || err.message || '恢复面试失败';
+      set({ status: 'error', error: msg });
     }
   },
 
-  reset: () => set({
-    sessionId: null,
-    messages: [],
-    pointStates: [],
-    currentPointId: null,
-    currentRound: 1,
-    progress: 0,
-    isComplete: false,
-    report: null,
-    status: 'idle',
-    error: null,
-  }),
+  _connectWs: (sessionId: string) => {
+    // 关闭旧连接
+    if (ws) {
+      ws.close();
+      ws = null;
+    }
+
+    const socket = new WebSocket(getWsUrl(sessionId));
+    ws = socket;
+
+    socket.onopen = () => {
+      console.log('[WS] 面试连接已建立');
+      set({ wsConnected: true });
+      // 发送 start 消息获取当前问题
+      socket.send(JSON.stringify({ type: 'start' }));
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        const { pointStates } = get();
+
+        switch (msg.type) {
+          case 'question':
+            // 收到新问题
+            set({
+              messages: [...get().messages, {
+                role: 'assistant',
+                content: msg.content,
+                point_id: msg.point_id,
+              }],
+              currentPointId: msg.point_id || get().currentPointId,
+              currentRound: msg.round || get().currentRound,
+            });
+            break;
+
+          case 'status':
+            // 状态更新（point_states、progress）
+            set({
+              pointStates: mergePointStates(pointStates, msg.point_states),
+              progress: msg.progress ?? get().progress,
+            });
+            break;
+
+          case 'complete':
+            // 面试完成
+            set({
+              isComplete: true,
+              status: 'complete',
+              report: msg.report || null,
+              progress: 1,
+            });
+            socket.close();
+            break;
+
+          case 'error':
+            set({
+              messages: [...get().messages, {
+                role: 'assistant',
+                content: `[系统] ${msg.error}`,
+              }],
+              error: msg.error,
+            });
+            break;
+        }
+      } catch {
+        console.error('[WS] 消息解析失败:', event.data);
+      }
+    };
+
+    socket.onclose = () => {
+      console.log('[WS] 面试连接已关闭');
+      set({ wsConnected: false });
+      ws = null;
+    };
+
+    socket.onerror = () => {
+      set({ wsConnected: false });
+    };
+  },
+
+  sendAnswer: (content: string) => {
+    const { sessionId, messages } = get();
+    if (!sessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+    // 先在 UI 显示用户消息
+    set({ messages: [...messages, { role: 'user', content }] });
+
+    // 通过 WebSocket 发送
+    ws.send(JSON.stringify({ type: 'answer', content }));
+  },
+
+  skipQuestion: () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'skip' }));
+  },
+
+  rephraseQuestion: () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'rephrase' }));
+  },
+
+  disconnect: () => {
+    if (ws) {
+      ws.close();
+      ws = null;
+    }
+    set({ wsConnected: false });
+  },
+
+  reset: () => {
+    if (ws) {
+      ws.close();
+      ws = null;
+    }
+    set({
+      sessionId: null,
+      messages: [],
+      pointStates: [],
+      currentPointId: null,
+      currentRound: 1,
+      progress: 0,
+      isComplete: false,
+      report: null,
+      status: 'idle',
+      error: null,
+      wsConnected: false,
+    });
+  },
 }));
