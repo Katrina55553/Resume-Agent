@@ -60,7 +60,12 @@ async def get_report(
             },
         }
 
-    report = interview.report or {}
+    report = {}
+    if interview.report_json:
+        try:
+            report = json.loads(interview.report_json)
+        except (json.JSONDecodeError, TypeError):
+            pass
 
     return {
         "code": 0,
