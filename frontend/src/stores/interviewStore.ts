@@ -305,6 +305,10 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     if (!sessionId) return;
 
     // 关闭 WebSocket
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     if (ws) {
       ws.close(1000);
       ws = null;
@@ -316,7 +320,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       set({
         isComplete: true,
         status: 'complete',
-        report: data.report || null,
+        report: data.report || {},
         progress: 1,
       });
     } catch (err: any) {

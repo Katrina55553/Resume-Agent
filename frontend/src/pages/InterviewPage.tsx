@@ -24,7 +24,7 @@ export default function InterviewPage() {
   const navigate = useNavigate();
   const {
     messages, pointStates, currentPointId, currentRound,
-    progress, isComplete, report, status, error, wsConnected,
+    progress, isComplete, status, error, wsConnected,
     startInterview, sendAnswer, skipQuestion, endInterview,
   } = useInterviewStore();
 
@@ -43,13 +43,13 @@ export default function InterviewPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // 面试完成后跳转
+  // 面试完成后跳转报告页
   useEffect(() => {
-    if (isComplete && report) {
+    if (isComplete) {
       const timer = setTimeout(() => navigate(`/session/${id}/report`), 2000);
       return () => clearTimeout(timer);
     }
-  }, [isComplete, report, id, navigate]);
+  }, [isComplete, id, navigate]);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
