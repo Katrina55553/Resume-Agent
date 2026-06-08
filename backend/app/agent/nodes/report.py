@@ -4,10 +4,14 @@
 LLM 可用时调用 DeepSeek 生成个性化报告，否则使用规则生成。
 """
 
+import asyncio
 import json
+import logging
 from typing import Dict, Any, List
 
 from app.core.llm import call_llm_json, is_llm_available
+
+logger = logging.getLogger(__name__)
 
 
 # ---------- 规则报告（降级方案）----------
@@ -176,11 +180,21 @@ async def generate_report(state: Dict[str, Any]) -> Dict[str, Any]:
     """生成面试报告
 
     汇总所有对话和评估结果，生成最终报告。
+    LLM 调用限时 30 秒，超时自动降级到规则报告。
     """
     report = None
 
     if is_llm_available():
-        report = _llm_generate_report(state)
+        try:
+            # 在线程池中运行 LLM 调用，限时 30 秒
+            loop = asyncio.get_event_loop()
+            report = await asyncio.wait_for(
+                loop.run_in_executor(None, _llm_generate_report, state),
+                timeout=30.0,
+            )
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"LLM 报告生成失败，降级到规则: {e}")
+            report = None
 
     if report is None:
         report = _rule_generate_report(state)

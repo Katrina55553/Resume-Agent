@@ -315,7 +315,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     }
 
     try {
-      const res = await api.post(`/sessions/${sessionId}/interview/end`);
+      const res = await api.post(`/sessions/${sessionId}/interview/end`, {}, { timeout: 120000 });
       const data = res.data.data || res.data;
       // 无论 report 是否为空，都标记完成并跳转
       set({
