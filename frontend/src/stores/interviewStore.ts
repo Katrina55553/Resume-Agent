@@ -80,6 +80,7 @@ function mergePointStates(existing: PointState[], states: Record<string, string>
 }
 
 let ws: WebSocket | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useInterviewStore = create<InterviewState>((set, get) => ({
   sessionId: null,
@@ -159,79 +160,100 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       ws.close();
       ws = null;
     }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
 
-    const socket = new WebSocket(getWsUrl(sessionId));
-    ws = socket;
+    const MAX_RETRIES = 5;
+    let retryCount = 0;
 
-    socket.onopen = () => {
-      console.log('[WS] 面试连接已建立');
-      set({ wsConnected: true });
-      // 发送 start 消息获取当前问题
-      socket.send(JSON.stringify({ type: 'start' }));
-    };
+    const connect = () => {
+      const socket = new WebSocket(getWsUrl(sessionId));
+      ws = socket;
 
-    socket.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        const { pointStates } = get();
+      socket.onopen = () => {
+        console.log('[WS] 面试连接已建立');
+        retryCount = 0;
+        set({ wsConnected: true, error: null });
+        socket.send(JSON.stringify({ type: 'start' }));
+      };
 
-        switch (msg.type) {
-          case 'question':
-            // 收到新问题
-            set({
-              messages: [...get().messages, {
-                role: 'assistant',
-                content: msg.content,
-                point_id: msg.point_id,
-              }],
-              currentPointId: msg.point_id || get().currentPointId,
-              currentRound: msg.round || get().currentRound,
-            });
-            break;
+      socket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          const { pointStates } = get();
 
-          case 'status':
-            // 状态更新（point_states、progress）
-            set({
-              pointStates: mergePointStates(pointStates, msg.point_states),
-              progress: msg.progress ?? get().progress,
-            });
-            break;
+          switch (msg.type) {
+            case 'question':
+              set({
+                messages: [...get().messages, {
+                  role: 'assistant',
+                  content: msg.content,
+                  point_id: msg.point_id,
+                }],
+                currentPointId: msg.point_id || get().currentPointId,
+                currentRound: msg.round || get().currentRound,
+              });
+              break;
 
-          case 'complete':
-            // 面试完成
-            set({
-              isComplete: true,
-              status: 'complete',
-              report: msg.report || null,
-              progress: 1,
-            });
-            socket.close();
-            break;
+            case 'status':
+              set({
+                pointStates: mergePointStates(pointStates, msg.point_states),
+                progress: msg.progress ?? get().progress,
+              });
+              break;
 
-          case 'error':
-            set({
-              messages: [...get().messages, {
-                role: 'assistant',
-                content: `[系统] ${msg.error}`,
-              }],
-              error: msg.error,
-            });
-            break;
+            case 'complete':
+              set({
+                isComplete: true,
+                status: 'complete',
+                report: msg.report || null,
+                progress: 1,
+              });
+              socket.close(1000);
+              break;
+
+            case 'error':
+              set({
+                messages: [...get().messages, {
+                  role: 'assistant',
+                  content: `[系统] ${msg.error}`,
+                }],
+                error: msg.error,
+              });
+              break;
+          }
+        } catch {
+          console.error('[WS] 消息解析失败:', event.data);
         }
-      } catch {
-        console.error('[WS] 消息解析失败:', event.data);
-      }
+      };
+
+      socket.onclose = (event) => {
+        console.log('[WS] 连接关闭', event.code);
+        set({ wsConnected: false });
+        ws = null;
+
+        // 非正常关闭且面试未完成时自动重连
+        const { isComplete } = get();
+        if (!isComplete && event.code !== 1000) {
+          if (retryCount < MAX_RETRIES) {
+            const delay = Math.min(1000 * Math.pow(2, retryCount), 16000);
+            retryCount++;
+            console.log(`[WS] ${delay / 1000}s 后重连 (${retryCount}/${MAX_RETRIES})`);
+            reconnectTimer = setTimeout(connect, delay);
+          } else {
+            set({ error: '连接断开，请刷新页面重试' });
+          }
+        }
+      };
+
+      socket.onerror = () => {
+        set({ wsConnected: false });
+      };
     };
 
-    socket.onclose = () => {
-      console.log('[WS] 面试连接已关闭');
-      set({ wsConnected: false });
-      ws = null;
-    };
-
-    socket.onerror = () => {
-      set({ wsConnected: false });
-    };
+    connect();
   },
 
   sendAnswer: (content: string) => {
@@ -256,16 +278,24 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   },
 
   disconnect: () => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     if (ws) {
-      ws.close();
+      ws.close(1000);  // 正常关闭，不触发重连
       ws = null;
     }
     set({ wsConnected: false });
   },
 
   reset: () => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     if (ws) {
-      ws.close();
+      ws.close(1000);
       ws = null;
     }
     set({
