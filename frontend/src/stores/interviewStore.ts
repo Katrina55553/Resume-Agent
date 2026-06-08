@@ -48,6 +48,7 @@ interface InterviewState {
   sendAnswer: (content: string) => void;
   skipQuestion: () => void;
   rephraseQuestion: () => void;
+  endInterview: () => Promise<void>;
   resumeInterview: (sessionId: string) => Promise<void>;
   _connectWs: (sessionId: string) => void;
   disconnect: () => void;
@@ -296,6 +297,31 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       ws.send(payload);
     } else {
       messageQueue.push(payload);
+    }
+  },
+
+  endInterview: async () => {
+    const { sessionId } = get();
+    if (!sessionId) return;
+
+    // 关闭 WebSocket
+    if (ws) {
+      ws.close(1000);
+      ws = null;
+    }
+
+    try {
+      const res = await api.post(`/sessions/${sessionId}/interview/end`);
+      const data = res.data.data || res.data;
+      set({
+        isComplete: true,
+        status: 'complete',
+        report: data.report || null,
+        progress: 1,
+      });
+    } catch (err: any) {
+      const msg = err.response?.data?.detail?.message || err.message || '结束面试失败';
+      set({ error: msg });
     }
   },
 

@@ -746,3 +746,95 @@ async def resume_interview(
         current_point_id=point_id,
         point_list=_build_point_state_list(doubt_points, point_states),
     )
+
+
+@router.post("/sessions/{session_id}/interview/end")
+async def end_interview(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """结束面试并生成报告
+
+    用户主动结束面试，用当前已有的评估数据生成报告。
+    """
+    state = await _load_interview_state(db, session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail={
+            "code": 1002,
+            "message": "面试未开始",
+        })
+
+    if state.get("is_completed"):
+        # 已完成，直接返回报告
+        orm_result = await db.execute(
+            select(InterviewStateORM).where(
+                InterviewStateORM.session_id == session_id
+            )
+        )
+        state_orm = orm_result.scalar_one_or_none()
+        report = {}
+        if state_orm and state_orm.report_json:
+            try:
+                report = json.loads(state_orm.report_json)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {
+            "code": 0,
+            "message": "面试已完成",
+            "data": {
+                "session_id": session_id,
+                "status": "complete",
+                "report": report,
+            },
+        }
+
+    # 标记所有未处理的存疑点为 skipped
+    doubt_points = state.get("doubt_points", [])
+    point_states = dict(state.get("point_states", {}))
+    for i, point in enumerate(doubt_points):
+        pid = point.get("id", f"point_{i}")
+        if point_states.get(pid) not in ("resolved", "skipped"):
+            point_states[pid] = "skipped"
+
+    state["point_states"] = point_states
+    state["is_completed"] = True
+
+    # 生成报告
+    report_update = await generate_report(state)
+    state.update(report_update)
+
+    # 保存到数据库
+    await _save_message(
+        db, session_id, "assistant",
+        json.dumps(state.get("report", {}), ensure_ascii=False), "",
+    )
+
+    orm_result = await db.execute(
+        select(InterviewStateORM).where(
+            InterviewStateORM.session_id == session_id
+        )
+    )
+    state_orm = orm_result.scalar_one_or_none()
+    if state_orm:
+        await _save_state_checkpoint(db, state_orm, state)
+
+    # 更新 session 状态
+    session_result = await db.execute(
+        select(Session).where(Session.id == session_id)
+    )
+    session = session_result.scalar_one_or_none()
+    if session:
+        session.status = SessionStatus.COMPLETED
+        session.updated_at = datetime.utcnow()
+
+    await db.commit()
+
+    return {
+        "code": 0,
+        "message": "面试已结束",
+        "data": {
+            "session_id": session_id,
+            "status": "complete",
+            "report": state.get("report"),
+        },
+    }

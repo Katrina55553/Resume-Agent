@@ -25,7 +25,7 @@ export default function InterviewPage() {
   const {
     messages, pointStates, currentPointId, currentRound,
     progress, isComplete, report, status, error, wsConnected,
-    startInterview, sendAnswer, skipQuestion, rephraseQuestion,
+    startInterview, sendAnswer, skipQuestion, endInterview,
   } = useInterviewStore();
 
   const [input, setInput] = useState('');
@@ -70,10 +70,10 @@ export default function InterviewPage() {
     skipQuestion();
   }, [wsConnected, skipQuestion]);
 
-  const handleRephrase = useCallback(() => {
-    if (!wsConnected) return;
-    rephraseQuestion();
-  }, [wsConnected, rephraseQuestion]);
+  const handleEndInterview = useCallback(async () => {
+    if (!confirm('确定要结束面试吗？未回答的存疑点将被跳过。')) return;
+    await endInterview();
+  }, [endInterview]);
 
   if (status === 'loading') {
     return (
@@ -173,11 +173,10 @@ export default function InterviewPage() {
                       跳过
                     </button>
                     <button
-                      onClick={handleRephrase}
-                      disabled={!wsConnected}
-                      className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 border rounded"
+                      onClick={handleEndInterview}
+                      className="px-2 py-1 text-xs text-red-500 hover:text-red-700 border border-red-300 rounded"
                     >
-                      换问法
+                      结束面试
                     </button>
                   </div>
                 </div>
