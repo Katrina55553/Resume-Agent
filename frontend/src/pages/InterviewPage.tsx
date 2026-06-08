@@ -71,7 +71,6 @@ export default function InterviewPage() {
   }, [wsConnected, skipQuestion]);
 
   const handleEndInterview = useCallback(async () => {
-    if (!confirm('确定要结束面试吗？未回答的存疑点将被跳过。')) return;
     await endInterview();
   }, [endInterview]);
 

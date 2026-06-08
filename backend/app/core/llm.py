@@ -234,16 +234,9 @@ def call_llm_with_tools(
         if not tool_calls and content:
             tool_calls = _parse_tool_calls_from_text(content)
             if tool_calls:
-                # 去掉内容中的工具调用标记，保留纯文本
-                for pattern in [
-                    r'<｜｜DSML｜｜tool_calls>.*?</｜｜DSML｜｜tool_calls>',
-                    r'<｜｜DSML｜｜invoke[^>]*>.*?</｜｜DSML｜｜invoke>',
-                    r'<｜tool_calls｜>.*?<｜/tool_calls｜>',
-                    r'<tool_call>.*?</tool_call>',
-                ]:
-                    content = re.sub(pattern, '', content, flags=re.DOTALL).strip()
-                # 清理残留的标签
-                content = re.sub(r'</?｜｜DSML｜｜[^>]*>', '', content).strip()
+                # 去掉所有 <...> 标签，只保留纯文本
+                content = re.sub(r'<[^>]*>', '', content, flags=re.DOTALL).strip()
+                content = re.sub(r'\n{3,}', '\n\n', content).strip()
 
         return content.strip() if content else "", tool_calls
 

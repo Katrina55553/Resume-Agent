@@ -317,15 +317,22 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     try {
       const res = await api.post(`/sessions/${sessionId}/interview/end`);
       const data = res.data.data || res.data;
+      // 无论 report 是否为空，都标记完成并跳转
       set({
         isComplete: true,
         status: 'complete',
-        report: data.report || {},
+        report: data.report || null,
         progress: 1,
       });
     } catch (err: any) {
-      const msg = err.response?.data?.detail?.message || err.message || '结束面试失败';
-      set({ error: msg });
+      // 即使 API 失败，也标记完成并跳转（避免卡死）
+      console.error('[结束面试] API 错误:', err);
+      set({
+        isComplete: true,
+        status: 'complete',
+        report: null,
+        progress: 1,
+      });
     }
   },
 
