@@ -2,11 +2,13 @@
 
 根据当前存疑点和对话历史生成面试问题。
 LLM 可用时调用 DeepSeek，否则使用模板。
+接入 RAG 知识库，检索相关面试题作为参考。
 """
 
 from typing import Dict, Any, List
 
 from app.core.llm import call_llm, is_llm_available
+from app.core.rag import retrieve_context, extract_technical_keywords
 
 
 # ---------- 模板（降级方案）----------
@@ -51,6 +53,7 @@ _QUESTION_SYSTEM_PROMPT = """你是一位经验丰富的技术面试官，正在
 - 不要重复之前问过的问题
 - 如果是第一轮提问，从存疑点的核心入手
 - 如果是追问，根据用户的上一个回答深入挖掘
+- 参考知识库中的面试题，但要根据候选人的简历内容做针对性调整
 - 语气自然，像真实面试对话，不要太生硬
 - 只返回问题文本，不要其他内容"""
 
@@ -60,7 +63,7 @@ def _llm_generate_question(
     messages: List[dict],
     current_round: int,
 ) -> str:
-    """调用 LLM 生成问题"""
+    """调用 LLM 生成问题（增强 RAG 上下文）"""
     # 构建对话历史（最近 6 轮）
     recent_messages = messages[-12:] if len(messages) > 12 else messages
     history_text = "\n".join(
@@ -68,9 +71,25 @@ def _llm_generate_question(
         for m in recent_messages
     )
 
-    user_prompt = f"""当前存疑点：
-- 原文引用：{doubt_point.get('source_text', '')}
-- 存疑原因：{doubt_point.get('reason', '')}
+    # RAG 检索：从知识库中查找相关面试题
+    source_text = doubt_point.get("source_text", "")
+    reason = doubt_point.get("reason", "")
+    keywords = extract_technical_keywords(f"{source_text} {reason}")
+    rag_query = " ".join(keywords) if keywords else f"{source_text} {reason}"
+    rag_context = retrieve_context(rag_query, top_k=3)
+
+    # 构建 prompt
+    rag_section = ""
+    if rag_context:
+        rag_section = f"""
+参考知识（面试题库，可参考但需结合简历内容调整）：
+{rag_context}
+
+"""
+
+    user_prompt = f"""{rag_section}当前存疑点：
+- 原文引用：{source_text}
+- 存疑原因：{reason}
 - 追问轮次：第 {current_round} 轮
 
 对话历史：
@@ -80,7 +99,6 @@ def _llm_generate_question(
 
     result = call_llm(_QUESTION_SYSTEM_PROMPT, user_prompt, temperature=0.7)
     if result:
-        # 清理可能的引号包裹
         return result.strip().strip('"').strip("'")
     return None
 

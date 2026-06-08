@@ -2,11 +2,13 @@
 
 评估用户回答质量，决定下一步：追问 / 切换存疑点 / 生成报告。
 LLM 可用时调用 DeepSeek 进行智能评估，否则使用规则评分。
+接入 RAG 知识库，用参考答案辅助评估技术准确性。
 """
 
 from typing import Dict, Any, List
 
 from app.core.llm import call_llm_json, is_llm_available
+from app.core.rag import retrieve_context, extract_technical_keywords
 from app.agent.rules import DEFAULT_RULES
 
 
@@ -39,18 +41,19 @@ _EVALUATE_SYSTEM_PROMPT = """你是一位技术面试评估专家。请评估候
 2. 深度 - 是否展示了对技术/业务的深入理解
 3. 完整性 - 是否回答了问题的核心要点
 4. 逻辑性 - 表达是否清晰、有条理
+5. 技术准确性 - 回答中的技术描述是否正确（参考知识库）
 
 返回 JSON 格式：
 {
   "score": 0-100（综合评分）,
-  "feedback": "简短评语（30字以内）",
+  "feedback": "简短评语（50字以内）",
   "credible": true/false（回答是否可信）,
   "highlights": ["亮点1"],
   "weaknesses": ["不足1"]
 }
 
 评分标准：
-- 90-100: 回答优秀，有具体案例和数据支撑
+- 90-100: 回答优秀，有具体案例和数据支撑，技术描述准确
 - 70-89: 回答良好，基本可信但可补充细节
 - 50-69: 回答一般，缺乏具体支撑
 - 30-49: 回答较差，内容模糊或不可信
@@ -63,8 +66,22 @@ def _llm_evaluate_answer(
     answer: str,
     current_round: int,
 ) -> dict:
-    """调用 LLM 评估回答"""
-    user_prompt = f"""存疑点：{doubt_point.get('source_text', '')}
+    """调用 LLM 评估回答（增强 RAG 上下文）"""
+    # RAG 检索：查找相关技术的参考答案
+    source_text = doubt_point.get("source_text", "")
+    keywords = extract_technical_keywords(f"{question} {answer}")
+    rag_query = " ".join(keywords) if keywords else question
+    rag_context = retrieve_context(rag_query, top_k=2)
+
+    rag_section = ""
+    if rag_context:
+        rag_section = f"""
+参考知识（用于验证回答的技术准确性）：
+{rag_context}
+
+"""
+
+    user_prompt = f"""{rag_section}存疑点：{source_text}
 存疑原因：{doubt_point.get('reason', '')}
 
 面试官提问：{question}
