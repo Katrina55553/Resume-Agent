@@ -42,8 +42,10 @@ interface InterviewState {
   status: 'idle' | 'loading' | 'active' | 'complete' | 'error';
   error: string | null;
   wsConnected: boolean;
+  selectedPointIds: string[];
 
   // Actions
+  setSelectedPointIds: (ids: string[]) => void;
   startInterview: (sessionId: string) => Promise<void>;
   sendAnswer: (content: string) => void;
   skipQuestion: () => void;
@@ -96,12 +98,18 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   status: 'idle',
   error: null,
   wsConnected: false,
+  selectedPointIds: [],
+
+  setSelectedPointIds: (ids: string[]) => set({ selectedPointIds: ids }),
 
   startInterview: async (sessionId: string) => {
     set({ status: 'loading', error: null, sessionId });
     try {
-      // 1. REST 调用创建面试状态
-      const res = await api.post(`/sessions/${sessionId}/interview/start`);
+      // 1. REST 调用创建面试状态，传递选中的存疑点 ID
+      const { selectedPointIds } = get();
+      const res = await api.post(`/sessions/${sessionId}/interview/start`, {
+        selected_point_ids: selectedPointIds,
+      });
       const data = res.data.data || res.data;
 
       set({

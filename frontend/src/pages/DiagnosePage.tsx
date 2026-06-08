@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDiagnoseStore, type DoubtPoint, type OverallAssessment } from '../stores/diagnoseStore';
+import { useInterviewStore } from '../stores/interviewStore';
 
 const PRIORITY_STYLES: Record<string, { bg: string; badge: string; label: string }> = {
   high: { bg: 'border-red-200 bg-red-50', badge: 'bg-red-100 text-red-700', label: '高优' },
@@ -26,9 +27,10 @@ export default function DiagnosePage() {
 
   const handleStartInterview = useCallback(() => {
     if (!id) return;
-    // TODO: 将 selectedIds 传递给面试模块
+    // 将选中的存疑点 ID 传递给面试模块
+    useInterviewStore.getState().setSelectedPointIds(selectedIds);
     navigate(`/session/${id}/interview`);
-  }, [id, navigate]);
+  }, [id, navigate, selectedIds]);
 
   if (status === 'loading' || status === 'idle') {
     return (

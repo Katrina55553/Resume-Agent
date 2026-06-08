@@ -245,11 +245,13 @@ def _compute_progress(state: dict) -> float:
 )
 async def start_interview(
     session_id: str,
+    body: Dict[str, Any] = None,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """开始面试
 
     校验会话状态 → 创建 InterviewState → 生成第一个问题 → 保存消息。
+    body.selected_point_ids: 可选，用户选中的存疑点 ID 列表。
     """
     # 1. 查找 session
     result = await db.execute(
@@ -280,6 +282,16 @@ async def start_interview(
             "code": 1004,
             "message": "没有存疑点，无法开始面试",
         })
+
+    # 过滤：只保留用户选中的存疑点
+    selected_ids = (body or {}).get("selected_point_ids", [])
+    if selected_ids:
+        doubt_points = [dp for dp in doubt_points if dp.get("id") in selected_ids]
+        if not doubt_points:
+            raise HTTPException(status_code=400, detail={
+                "code": 1004,
+                "message": "选中的存疑点无效",
+            })
 
     # 4. 检查是否已有面试状态（幂等）
     existing = await db.execute(
