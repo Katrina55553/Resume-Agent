@@ -234,8 +234,13 @@ def call_llm_with_tools(
         if not tool_calls and content:
             tool_calls = _parse_tool_calls_from_text(content)
             if tool_calls:
-                # 去掉所有 <...> 标签，只保留纯文本
-                content = re.sub(r'<[^>]*>', '', content, flags=re.DOTALL).strip()
+                # 去掉所有 <...> 标签和工具调用相关文本
+                content = re.sub(r'<[^>]*>', '', content, flags=re.DOTALL)
+                # 去掉 DSML 相关残留
+                content = re.sub(r'DSML', '', content)
+                content = re.sub(r'tool_calls', '', content)
+                content = re.sub(r'invoke', '', content)
+                # 清理多余空行和空格
                 content = re.sub(r'\n{3,}', '\n\n', content).strip()
 
         return content.strip() if content else "", tool_calls
