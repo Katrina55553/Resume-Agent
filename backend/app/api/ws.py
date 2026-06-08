@@ -1,10 +1,11 @@
 """WebSocket 路由
 
-处理实时面试交互，支持：
-- answer: 提交回答，接收下一个问题
+处理实时面试交互，支持断线重连消息补推。
+消息协议：
+- answer: 提交回答
 - skip: 跳过当前存疑点
 - rephrase: 换个问法
-- start: 开始面试
+- start: 开始/恢复面试（重连时补推缓存消息）
 """
 
 import json
@@ -14,6 +15,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
 from app.core.database import async_session_maker
+from app.core.msg_cache import push_message, get_pending_messages
 from app.models.session import Session, SessionStatus
 from app.models.interview import InterviewStateORM, InterviewMessageORM
 from app.agent.nodes.question import generate_question
@@ -33,6 +35,23 @@ async def _send_json(websocket: WebSocket, data: dict) -> None:
         await websocket.send_json(data)
     except Exception:
         pass
+
+
+async def _send_and_cache(
+    websocket: WebSocket,
+    session_id: str,
+    data: dict,
+) -> None:
+    """发送消息并缓存到 Redis。
+
+    如果 WS 发送失败（连接已断），消息仍在 Redis 中，
+    下次重连时会补推。
+    """
+    msg_type = data.get("type", "unknown")
+    # 先写 Redis 缓存（确保不丢）
+    await push_message(session_id, msg_type, data)
+    # 再发 WebSocket
+    await _send_json(websocket, data)
 
 
 async def _load_state_from_db(session_id: str) -> dict | None:
@@ -187,14 +206,14 @@ async def _handle_interview_action(
     # 1. 加载状态
     state = await _load_state_from_db(session_id)
     if not state:
-        await _send_json(websocket, {
+        await _send_and_cache(websocket, session_id, {
             "type": "error",
             "error": "面试未开始，请先调用 /interview/start",
         })
         return
 
     if state.get("is_completed") and action_type != "start":
-        await _send_json(websocket, {
+        await _send_and_cache(websocket, session_id, {
             "type": "error",
             "error": "面试已结束",
         })
@@ -227,12 +246,12 @@ async def _handle_interview_action(
             )
             await _save_state_checkpoint_to_db(session_id, state)
 
-            await _send_json(websocket, {
+            await _send_and_cache(websocket, session_id, {
                 "type": "complete",
                 "report": state.get("report"),
             })
             # 发送最终状态
-            await _send_json(websocket, {
+            await _send_and_cache(websocket, session_id, {
                 "type": "status",
                 "point_states": point_states,
                 "progress": 1.0,
@@ -256,13 +275,13 @@ async def _handle_interview_action(
         )
         await _save_state_checkpoint_to_db(session_id, state)
 
-        await _send_json(websocket, {
+        await _send_and_cache(websocket, session_id, {
             "type": "question",
             "content": question_text,
             "point_id": next_pid,
             "round": 1,
         })
-        await _send_json(websocket, {
+        await _send_and_cache(websocket, session_id, {
             "type": "status",
             "point_states": point_states,
             "progress": _compute_progress(state),
@@ -282,7 +301,7 @@ async def _handle_interview_action(
         )
         await _save_state_checkpoint_to_db(session_id, state)
 
-        await _send_json(websocket, {
+        await _send_and_cache(websocket, session_id, {
             "type": "question",
             "content": question_text,
             "point_id": point_id,
@@ -328,11 +347,11 @@ async def _handle_interview_action(
             )
             await _save_state_checkpoint_to_db(session_id, state)
 
-            await _send_json(websocket, {
+            await _send_and_cache(websocket, session_id, {
                 "type": "complete",
                 "report": state.get("report"),
             })
-            await _send_json(websocket, {
+            await _send_and_cache(websocket, session_id, {
                 "type": "status",
                 "point_states": state.get("point_states", {}),
                 "progress": 1.0,
@@ -353,34 +372,41 @@ async def _handle_interview_action(
         )
         await _save_state_checkpoint_to_db(session_id, state)
 
-        await _send_json(websocket, {
+        await _send_and_cache(websocket, session_id, {
             "type": "question",
             "content": question_text,
             "point_id": new_point_id,
             "round": state.get("current_round", 1),
         })
-        await _send_json(websocket, {
+        await _send_and_cache(websocket, session_id, {
             "type": "status",
             "point_states": state.get("point_states", {}),
             "progress": _compute_progress(state),
         })
         return
 
-    # ---- start (从 WS 启动面试，需要先通过 HTTP start) ----
+    # ---- start (开始/恢复面试，重连时补推缓存消息) ----
     if action_type == "start":
-        # 通过 WS 发送当前问题（面试应已通过 HTTP 启动）
+        # 先检查 Redis 中是否有未消费的缓存消息
+        pending = await get_pending_messages(session_id)
+        if pending:
+            for msg in pending:
+                await _send_json(websocket, msg)
+            return
+
+        # 无缓存消息，发送当前状态
         if not state.get("is_completed"):
             question_update = await generate_question(state)
             question_text = question_update.get("current_question", "")
             point_id_val, _ = _get_current_point_info(state)
 
-            await _send_json(websocket, {
+            await _send_and_cache(websocket, session_id, {
                 "type": "question",
                 "content": question_text,
                 "point_id": point_id_val,
                 "round": state.get("current_round", 1),
             })
-            await _send_json(websocket, {
+            await _send_and_cache(websocket, session_id, {
                 "type": "status",
                 "point_states": state.get("point_states", {}),
                 "progress": _compute_progress(state),
@@ -423,7 +449,7 @@ async def websocket_interview(websocket: WebSocket, session_id: str):
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError:
-                await _send_json(websocket, {
+                await _send_and_cache(websocket, session_id, {
                     "type": "error",
                     "error": "无效的 JSON 格式",
                 })
@@ -433,7 +459,7 @@ async def websocket_interview(websocket: WebSocket, session_id: str):
             content = data.get("content", "")
 
             if msg_type not in ("answer", "skip", "rephrase", "start"):
-                await _send_json(websocket, {
+                await _send_and_cache(websocket, session_id, {
                     "type": "error",
                     "error": f"未知的消息类型: {msg_type}",
                 })
@@ -441,7 +467,7 @@ async def websocket_interview(websocket: WebSocket, session_id: str):
 
             # answer 必须有内容
             if msg_type == "answer" and not content:
-                await _send_json(websocket, {
+                await _send_and_cache(websocket, session_id, {
                     "type": "error",
                     "error": "回答内容不能为空",
                 })
