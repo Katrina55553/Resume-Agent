@@ -799,9 +799,11 @@ async def end_interview(
     state["point_states"] = point_states
     state["is_completed"] = True
 
-    # 生成报告
-    report_update = await generate_report(state)
-    state.update(report_update)
+    # 直接用规则生成报告（跳过 LLM，避免超时）
+    from app.agent.nodes.report import _rule_generate_report
+    report = _rule_generate_report(state)
+    state["report"] = report
+    state["is_completed"] = True
 
     # 保存到数据库
     await _save_message(
