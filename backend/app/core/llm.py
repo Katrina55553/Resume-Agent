@@ -106,39 +106,75 @@ def is_llm_available() -> bool:
 def _parse_tool_calls_from_text(content: str) -> List[Dict[str, Any]]:
     """从文本内容中解析工具调用（兼容 DeepSeek 等不支持结构化 tool_calls 的模型）。
 
-    DeepSeek 可能把工具调用输出为文本：
-    <｜tool_calls｜><｜tool_call｜>func_name({"arg": "val"})<｜/tool_call｜><｜/tool_calls｜>
-    或普通格式：
-    <tool_call>func_name({"arg": "val"})</tool_call>
+    DeepSeek 实际输出格式：
+    <｜｜DSML｜｜tool_calls>
+    <｜｜DSML｜｜invoke name="search_knowledge_base">
+    <｜｜DSML｜｜invoke name="search_knowledge_base">
+    </｜｜DSML｜｜invoke>
+    </｜｜DSML｜｜invoke>
+    </｜｜DSML｜｜tool_calls>
     """
     tool_calls = []
+    known_tools = {"search_knowledge_base", "lookup_resume_field", "verify_code_snippet"}
 
-    # 尝试多种格式
-    patterns = [
-        # DeepSeek 格式：<｜tool_call｜>name({...})<｜/tool_call｜>
-        r'<｜tool_call｜>(\w+)\((\{.*?\})\)<｜/tool_call｜>',
-        # 通用 XML 格式：<tool_call>name({...})</tool_call>
-        r'<tool_call>(\w+)\((\{.*?\})\)</tool_call>',
-        # 简单格式：name({"arg": "val"})
-        r'(search_knowledge_base|lookup_resume_field|verify_code_snippet)\((\{[^)]+\})\)',
-    ]
-
-    for pattern in patterns:
-        matches = re.findall(pattern, content, re.DOTALL)
-        if matches:
-            for i, (func_name, args_str) in enumerate(matches):
-                try:
-                    args = json.loads(args_str)
-                except json.JSONDecodeError:
-                    args = {}
+    # 模式 1：XML 属性格式 — name="func_name"
+    # 匹配 <...invoke name="func_name"...> 或 <...call name="func_name"...>
+    xml_pattern = r'name\s*=\s*["\'](\w+)["\']'
+    matches = re.findall(xml_pattern, content)
+    if matches:
+        seen = set()
+        for func_name in matches:
+            if func_name in known_tools and func_name not in seen:
+                seen.add(func_name)
+                # 尝试从内容中提取 JSON 参数
+                args = _extract_json_near_tool(content, func_name)
                 tool_calls.append({
-                    "id": f"call_{i}",
+                    "id": f"call_{len(tool_calls)}",
                     "name": func_name,
                     "arguments": args,
                 })
-            break
+        if tool_calls:
+            return tool_calls
+
+    # 模式 2：函数调用格式 — func_name({...})
+    func_pattern = r'(search_knowledge_base|lookup_resume_field|verify_code_snippet)\s*\((\{[^)]*\})\)'
+    matches = re.findall(func_pattern, content, re.DOTALL)
+    if matches:
+        for i, (func_name, args_str) in enumerate(matches):
+            try:
+                args = json.loads(args_str)
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append({
+                "id": f"call_{i}",
+                "name": func_name,
+                "arguments": args,
+            })
+        return tool_calls
+
+    # 模式 3：最宽泛 — 只要出现已知工具名就调用（无参数）
+    for func_name in known_tools:
+        if func_name in content:
+            tool_calls.append({
+                "id": f"call_{len(tool_calls)}",
+                "name": func_name,
+                "arguments": {},
+            })
 
     return tool_calls
+
+
+def _extract_json_near_tool(content: str, func_name: str) -> dict:
+    """尝试从工具调用附近提取 JSON 参数"""
+    # 查找 func_name 附近的 JSON 对象
+    # 先找整个内容中的 JSON 对象
+    json_matches = re.findall(r'\{[^{}]+\}', content)
+    for jm in json_matches:
+        try:
+            return json.loads(jm)
+        except json.JSONDecodeError:
+            continue
+    return {}
 
 
 def call_llm_with_tools(
@@ -200,10 +236,14 @@ def call_llm_with_tools(
             if tool_calls:
                 # 去掉内容中的工具调用标记，保留纯文本
                 for pattern in [
+                    r'<｜｜DSML｜｜tool_calls>.*?</｜｜DSML｜｜tool_calls>',
+                    r'<｜｜DSML｜｜invoke[^>]*>.*?</｜｜DSML｜｜invoke>',
                     r'<｜tool_calls｜>.*?<｜/tool_calls｜>',
                     r'<tool_call>.*?</tool_call>',
                 ]:
                     content = re.sub(pattern, '', content, flags=re.DOTALL).strip()
+                # 清理残留的标签
+                content = re.sub(r'</?｜｜DSML｜｜[^>]*>', '', content).strip()
 
         return content.strip() if content else "", tool_calls
 
