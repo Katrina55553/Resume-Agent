@@ -262,10 +262,11 @@ async def start_interview(
             "message": "会话不存在",
         })
 
-    # 2. 校验状态：必须已完成诊断
+    # 2. 校验状态：必须已完成诊断（COMPLETED 也允许，支持重新面试）
     if session.status not in (
         SessionStatus.DIAGNOSED,
         SessionStatus.INTERVIEWING,
+        SessionStatus.COMPLETED,
     ):
         raise HTTPException(status_code=400, detail={
             "code": 1003,
