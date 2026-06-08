@@ -81,6 +81,7 @@ function mergePointStates(existing: PointState[], states: Record<string, string>
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let messageQueue: string[] = [];  // 断连期间缓存的消息
 
 export const useInterviewStore = create<InterviewState>((set, get) => ({
   sessionId: null,
@@ -177,6 +178,13 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         retryCount = 0;
         set({ wsConnected: true, error: null });
         socket.send(JSON.stringify({ type: 'start' }));
+
+        // 发送断连期间缓存的消息
+        while (messageQueue.length > 0) {
+          const msg = messageQueue.shift()!;
+          console.log('[WS] 发送缓存消息');
+          socket.send(msg);
+        }
       };
 
       socket.onmessage = (event) => {
@@ -258,23 +266,37 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
 
   sendAnswer: (content: string) => {
     const { sessionId, messages } = get();
-    if (!sessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!sessionId) return;
 
     // 先在 UI 显示用户消息
     set({ messages: [...messages, { role: 'user', content }] });
 
-    // 通过 WebSocket 发送
-    ws.send(JSON.stringify({ type: 'answer', content }));
+    const payload = JSON.stringify({ type: 'answer', content });
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+    } else {
+      // 断连时缓存消息
+      console.log('[WS] 连接断开，消息已缓存');
+      messageQueue.push(payload);
+    }
   },
 
   skipQuestion: () => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'skip' }));
+    const payload = JSON.stringify({ type: 'skip' });
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+    } else {
+      messageQueue.push(payload);
+    }
   },
 
   rephraseQuestion: () => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'rephrase' }));
+    const payload = JSON.stringify({ type: 'rephrase' });
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+    } else {
+      messageQueue.push(payload);
+    }
   },
 
   disconnect: () => {
@@ -282,6 +304,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    messageQueue = [];
     if (ws) {
       ws.close(1000);  // 正常关闭，不触发重连
       ws = null;
@@ -294,6 +317,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    messageQueue = [];
     if (ws) {
       ws.close(1000);
       ws = null;
