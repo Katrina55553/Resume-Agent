@@ -2,13 +2,19 @@
 
 评估用户回答质量，决定下一步：追问 / 切换存疑点 / 生成报告。
 LLM 可用时调用 DeepSeek 进行智能评估，否则使用规则评分。
-接入 RAG 知识库，用参考答案辅助评估技术准确性。
+支持 Tool Calling：LLM 可自主调用知识库验证技术准确性。
 """
 
+import json
 from typing import Dict, Any, List
 
-from app.core.llm import call_llm_json, is_llm_available
-from app.core.rag import retrieve_context, extract_technical_keywords
+from app.core.llm import (
+    call_llm_json,
+    call_llm_with_tools,
+    continue_with_tool_results,
+    is_llm_available,
+)
+from app.core.tools import get_tools, execute_tool
 from app.agent.rules import DEFAULT_RULES
 
 
@@ -32,16 +38,20 @@ def _rule_score_answer(answer_text: str, current_round: int) -> tuple:
     return score, feedback
 
 
-# ---------- LLM 评估 ----------
+# ---------- LLM 评估（Tool Calling）----------
 
 _EVALUATE_SYSTEM_PROMPT = """你是一位技术面试评估专家。请评估候选人对面试问题的回答质量。
+
+你可以使用以下工具：
+- search_knowledge_base: 检索技术知识库，验证候选人回答中的技术描述是否准确
+- verify_code_snippet: 当候选人给出了代码片段时，验证其正确性
 
 评估维度：
 1. 真实性 - 回答是否可信，有具体细节支撑
 2. 深度 - 是否展示了对技术/业务的深入理解
 3. 完整性 - 是否回答了问题的核心要点
 4. 逻辑性 - 表达是否清晰、有条理
-5. 技术准确性 - 回答中的技术描述是否正确（参考知识库）
+5. 技术准确性 - 回答中的技术描述是否正确
 
 返回 JSON 格式：
 {
@@ -65,24 +75,14 @@ def _llm_evaluate_answer(
     question: str,
     answer: str,
     current_round: int,
+    resume_data: dict = None,
 ) -> dict:
-    """调用 LLM 评估回答（增强 RAG 上下文）"""
-    # RAG 检索：查找相关技术的参考答案
+    """调用 LLM 评估回答（支持 Tool Calling）"""
     source_text = doubt_point.get("source_text", "")
-    keywords = extract_technical_keywords(f"{question} {answer}")
-    rag_query = " ".join(keywords) if keywords else question
-    rag_context = retrieve_context(rag_query, top_k=2)
+    reason = doubt_point.get("reason", "")
 
-    rag_section = ""
-    if rag_context:
-        rag_section = f"""
-参考知识（用于验证回答的技术准确性）：
-{rag_context}
-
-"""
-
-    user_prompt = f"""{rag_section}存疑点：{source_text}
-存疑原因：{doubt_point.get('reason', '')}
+    user_prompt = f"""存疑点：{source_text}
+存疑原因：{reason}
 
 面试官提问：{question}
 
@@ -90,25 +90,86 @@ def _llm_evaluate_answer(
 
 追问轮次：第 {current_round} 轮
 
-请评估回答质量："""
+请评估回答质量（如需验证技术准确性，可调用工具）："""
 
-    result = call_llm_json(_EVALUATE_SYSTEM_PROMPT, user_prompt)
-    if result and "score" in result:
-        return result
+    # 第一次调用：带 tools
+    content, tool_calls = call_llm_with_tools(
+        _EVALUATE_SYSTEM_PROMPT, user_prompt, get_tools(), temperature=0.3,
+    )
+
+    # 如果没有工具调用，尝试解析 JSON
+    if not tool_calls:
+        if content:
+            return _parse_evaluation(content)
+        return None
+
+    # 执行工具调用
+    tool_results = []
+    for tc in tool_calls:
+        result = execute_tool(tc["name"], tc["arguments"], resume_data)
+        tool_results.append({
+            "tool_call_id": tc["id"],
+            "content": result,
+        })
+
+    # 将工具结果返回给 LLM
+    assistant_msg = {
+        "role": "assistant",
+        "content": content or "",
+        "tool_calls": [
+            {
+                "id": tc["id"],
+                "type": "function",
+                "function": {
+                    "name": tc["name"],
+                    "arguments": str(tc["arguments"]),
+                },
+            }
+            for tc in tool_calls
+        ],
+    }
+
+    final_prompt_messages = [
+        {"role": "user", "content": user_prompt},
+        assistant_msg,
+    ]
+
+    final_result = continue_with_tool_results(
+        _EVALUATE_SYSTEM_PROMPT, final_prompt_messages, tool_results, temperature=0.3,
+    )
+
+    if final_result:
+        return _parse_evaluation(final_result)
+
+    # 降级：用第一次的文本
+    if content:
+        return _parse_evaluation(content)
     return None
+
+
+def _parse_evaluation(text: str) -> dict:
+    """解析 LLM 返回的评估 JSON"""
+    json_match = re.search(r"\{[\s\S]*\}", text)
+    if json_match:
+        try:
+            return json.loads(json_match.group())
+        except json.JSONDecodeError:
+            pass
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+
+# 需要导入 re
+import re
 
 
 # ---------- 节点函数 ----------
 
 
 async def evaluate_answer(state: Dict[str, Any]) -> Dict[str, Any]:
-    """评估用户回答并决定下一步
-
-    决策逻辑：
-    1. 如果 current_round >= MAX_FOLLOW_UP → 标记当前点 resolved，切换到下一个
-    2. 如果回答质量低且轮次未满 → follow_up（继续追问）
-    3. 如果所有存疑点都处理完 → 生成报告
-    """
+    """评估用户回答并决定下一步"""
     answer_text: str = state.get("current_answer", "")
     current_round: int = state.get("current_round", 1)
     point_index: int = state.get("current_point_index", 0)
@@ -116,6 +177,7 @@ async def evaluate_answer(state: Dict[str, Any]) -> Dict[str, Any]:
     point_states: dict = dict(state.get("point_states", {}))
     answer_too_short: bool = state.get("answer_too_short", False)
     messages: List[dict] = state.get("messages", [])
+    resume_data: dict = state.get("resume_data", {})
 
     # 获取当前存疑点和问题
     current_point = doubt_points[point_index] if point_index < len(doubt_points) else {}
@@ -129,14 +191,13 @@ async def evaluate_answer(state: Dict[str, Any]) -> Dict[str, Any]:
     llm_result = None
     if is_llm_available() and len(answer_text.strip()) >= 10:
         llm_result = _llm_evaluate_answer(
-            current_point, current_question, answer_text, current_round,
+            current_point, current_question, answer_text, current_round, resume_data,
         )
 
     if llm_result:
         score = llm_result.get("score", 60)
         feedback = llm_result.get("feedback", "")
         credible = llm_result.get("credible", True)
-        # 不可信的回答降分
         if not credible:
             score = min(score, 45)
     else:
@@ -158,7 +219,6 @@ async def evaluate_answer(state: Dict[str, Any]) -> Dict[str, Any]:
     if doubt_points and point_index < len(doubt_points):
         current_point_id = doubt_points[point_index].get("id", "")
 
-    # 追问次数达到上限，或回答质量足够高 → 切换到下一个存疑点
     if current_round >= DEFAULT_RULES.MAX_FOLLOW_UP or score >= 75:
         if current_point_id:
             point_states[current_point_id] = "resolved"
@@ -184,7 +244,6 @@ async def evaluate_answer(state: Dict[str, Any]) -> Dict[str, Any]:
             "point_states": point_states,
         }
 
-    # 回答不够好，继续追问
     return {
         "current_evaluation": evaluation,
         "decision": "follow_up",

@@ -115,12 +115,21 @@ async def _load_interview_state(
         for msg in msg_result.scalars().all()
     ]
 
-    # 加载存疑点（从 session）
+    # 加载存疑点和简历数据（从 session）
     session_result = await db.execute(
         select(Session).where(Session.id == session_id)
     )
     session = session_result.scalar_one_or_none()
     doubt_points = _extract_doubt_points(session) if session else []
+
+    # 加载简历结构化数据（供 Tool Calling 使用）
+    resume_data = {}
+    if session and session.parsed_content:
+        try:
+            parsed = json.loads(session.parsed_content)
+            resume_data = {k: v for k, v in parsed.items() if k != "diagnose_result"}
+        except (json.JSONDecodeError, TypeError):
+            pass
 
     # 从 ORM 恢复评估历史（从消息中提取，简化处理）
     evaluations = []
@@ -144,6 +153,7 @@ async def _load_interview_state(
         "messages": messages,
         "is_completed": state_orm.is_completed,
         "evaluations": evaluations,
+        "resume_data": resume_data,
         # 以下字段供节点函数使用
         "current_question": None,
         "current_answer": None,
@@ -310,6 +320,15 @@ async def start_interview(
     db.add(state_orm)
 
     # 6. 构造初始 state，调用问题生成节点
+    # 加载简历数据供 Tool Calling 使用
+    resume_data = {}
+    if session.parsed_content:
+        try:
+            parsed = json.loads(session.parsed_content)
+            resume_data = {k: v for k, v in parsed.items() if k != "diagnose_result"}
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     initial_state = {
         "doubt_points": doubt_points,
         "current_point_index": 0,
@@ -318,6 +337,7 @@ async def start_interview(
         "messages": [],
         "current_question": None,
         "current_answer": None,
+        "resume_data": resume_data,
     }
     update = await generate_question(initial_state)
 

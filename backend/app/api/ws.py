@@ -67,18 +67,20 @@ async def _load_state_from_db(session_id: str) -> dict | None:
             for msg in msg_result.scalars().all()
         ]
 
-        # 加载存疑点
+        # 加载存疑点和简历数据
         session_result = await db.execute(
             select(Session).where(Session.id == session_id)
         )
         session_obj = session_result.scalar_one_or_none()
         doubt_points = []
+        resume_data = {}
         if session_obj and session_obj.parsed_content:
             try:
                 parsed = json.loads(session_obj.parsed_content)
                 doubt_points = parsed.get("diagnose_result", {}).get(
                     "doubt_points", []
                 )
+                resume_data = {k: v for k, v in parsed.items() if k != "diagnose_result"}
             except (json.JSONDecodeError, TypeError):
                 pass
 
@@ -86,6 +88,7 @@ async def _load_state_from_db(session_id: str) -> dict | None:
         "session_id": str(session_id),
         "interview_id": str(state_orm.id),
         "doubt_points": doubt_points,
+        "resume_data": resume_data,
         "current_point_index": state_orm.current_point_index,
         "current_round": state_orm.current_round,
         "point_states": state_orm.point_states or {},
