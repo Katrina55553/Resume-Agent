@@ -288,11 +288,19 @@ async def start_interview(
     )
     state_orm = existing.scalar_one_or_none()
 
+    # 面试已完成 → 清除旧状态，允许重新开始
     if state_orm and state_orm.is_completed:
-        raise HTTPException(status_code=400, detail={
-            "code": 1005,
-            "message": "面试已结束，请查看报告",
-        })
+        # 删除旧的面试消息
+        from sqlalchemy import delete as sql_delete
+        await db.execute(
+            sql_delete(InterviewMessageORM).where(
+                InterviewMessageORM.session_id == session_id
+            )
+        )
+        # 删除旧的面试状态
+        await db.delete(state_orm)
+        await db.flush()
+        state_orm = None
 
     if state_orm:
         # 已有状态但未完成，恢复面试
