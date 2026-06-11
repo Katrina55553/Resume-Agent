@@ -325,7 +325,6 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     try {
       const res = await api.post(`/sessions/${sessionId}/interview/end`, {}, { timeout: 120000 });
       const data = res.data.data || res.data;
-      // 无论 report 是否为空，都标记完成并跳转
       set({
         isComplete: true,
         status: 'complete',
@@ -333,14 +332,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         progress: 1,
       });
     } catch (err: any) {
-      // 即使 API 失败，也标记完成并跳转（避免卡死）
-      console.error('[结束面试] API 错误:', err);
-      set({
-        isComplete: true,
-        status: 'complete',
-        report: null,
-        progress: 1,
-      });
+      const msg = err.response?.data?.detail?.message || err.message || '结束面试失败';
+      console.error('[结束面试] API 错误:', msg);
+      set({ error: msg, status: 'error' });
     }
   },
 
@@ -378,6 +372,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       report: null,
       status: 'idle',
       error: null,
+      selectedPointIds: [],
       wsConnected: false,
     });
   },

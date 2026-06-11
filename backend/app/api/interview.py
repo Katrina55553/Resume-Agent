@@ -8,7 +8,7 @@ import json
 import uuid as uuid_lib
 from typing import Dict, Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -120,7 +120,14 @@ async def _load_interview_state(
         select(Session).where(Session.id == session_id)
     )
     session = session_result.scalar_one_or_none()
-    doubt_points = _extract_doubt_points(session) if session else []
+    all_doubt_points = _extract_doubt_points(session) if session else []
+
+    # 只保留 point_states 中存在的存疑点（用户选中的子集）
+    saved_point_states = state_orm.point_states or {}
+    if saved_point_states:
+        doubt_points = [dp for dp in all_doubt_points if dp.get("id") in saved_point_states]
+    else:
+        doubt_points = all_doubt_points
 
     # 加载简历结构化数据（供 Tool Calling 使用）
     resume_data = {}
@@ -245,7 +252,7 @@ def _compute_progress(state: dict) -> float:
 )
 async def start_interview(
     session_id: str,
-    body: Dict[str, Any] = None,
+    body: Dict[str, Any] = Body(default={}),
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """开始面试

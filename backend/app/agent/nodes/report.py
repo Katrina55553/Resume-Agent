@@ -186,14 +186,16 @@ async def generate_report(state: Dict[str, Any]) -> Dict[str, Any]:
 
     if is_llm_available():
         try:
-            # 在线程池中运行 LLM 调用，限时 30 秒
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             report = await asyncio.wait_for(
                 loop.run_in_executor(None, _llm_generate_report, state),
                 timeout=30.0,
             )
-        except (asyncio.TimeoutError, Exception) as e:
-            logger.warning(f"LLM 报告生成失败，降级到规则: {e}")
+        except asyncio.TimeoutError:
+            logger.warning("LLM 报告生成超时（30s），降级到规则报告")
+            report = None
+        except Exception as e:
+            logger.error(f"LLM 报告生成异常: {e}", exc_info=True)
             report = None
 
     if report is None:

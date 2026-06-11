@@ -152,22 +152,26 @@ def _parse_tool_calls_from_text(content: str) -> List[Dict[str, Any]]:
             })
         return tool_calls
 
-    # 模式 3：最宽泛 — 只要出现已知工具名就调用（无参数）
-    for func_name in known_tools:
-        if func_name in content:
-            tool_calls.append({
-                "id": f"call_{len(tool_calls)}",
-                "name": func_name,
-                "arguments": {},
-            })
-
     return tool_calls
 
 
 def _extract_json_near_tool(content: str, func_name: str) -> dict:
-    """尝试从工具调用附近提取 JSON 参数"""
-    # 查找 func_name 附近的 JSON 对象
-    # 先找整个内容中的 JSON 对象
+    """尝试从工具调用附近提取 JSON 参数
+
+    优先查找 func_name 后面紧跟的 JSON，找不到再用全文第一个 JSON。
+    """
+    # 先找 func_name 附近的 JSON（func_name 后 200 字符内）
+    func_pos = content.find(func_name)
+    if func_pos >= 0:
+        nearby = content[func_pos:func_pos + 200]
+        json_matches = re.findall(r'\{[^{}]+\}', nearby)
+        for jm in json_matches:
+            try:
+                return json.loads(jm)
+            except json.JSONDecodeError:
+                continue
+
+    # 降级：找全文中的 JSON
     json_matches = re.findall(r'\{[^{}]+\}', content)
     for jm in json_matches:
         try:
@@ -234,13 +238,8 @@ def call_llm_with_tools(
         if not tool_calls and content:
             tool_calls = _parse_tool_calls_from_text(content)
             if tool_calls:
-                # 去掉所有 <...> 标签和工具调用相关文本
+                # 只去掉 DSML 标签格式，不破坏正常文本
                 content = re.sub(r'<[^>]*>', '', content, flags=re.DOTALL)
-                # 去掉 DSML 相关残留
-                content = re.sub(r'DSML', '', content)
-                content = re.sub(r'tool_calls', '', content)
-                content = re.sub(r'invoke', '', content)
-                # 清理多余空行和空格
                 content = re.sub(r'\n{3,}', '\n\n', content).strip()
 
         return content.strip() if content else "", tool_calls
