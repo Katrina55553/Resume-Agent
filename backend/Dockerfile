@@ -1,24 +1,31 @@
-FROM python:3.12-bookworm
+FROM python:3-slim
 
 WORKDIR /app
 
 # 换阿里云 Debian 镜像源（加速 apt）
 RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
 
-# 安装系统依赖（python-magic 需要 libmagic，psycopg2 需要 libpq-dev）
+# 安装系统依赖（含 Rust 工具链，pydantic-core 需要）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
     libpq-dev \
+    gcc \
+    g++ \
+    curl \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && . "$HOME/.cargo/env" \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件并安装（重试 3 次，优先用预编译 wheel）
+# 确保 Rust 在 PATH 中
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# 复制依赖文件并安装
 COPY requirements.txt .
 RUN pip install --no-cache-dir \
     -i https://mirrors.aliyun.com/pypi/simple/ \
     --trusted-host mirrors.aliyun.com \
-    --default-timeout=120 \
-    --retries=3 \
-    --prefer-binary \
+    --default-timeout=300 \
+    --retries=5 \
     -r requirements.txt
 
 # 复制应用代码
