@@ -75,7 +75,7 @@ def _rule_generate_report(state: dict) -> dict:
     if weak_points:
         suggestions.append(f"有 {len(weak_points)} 个存疑点回答较弱，建议重点完善简历中相关内容。")
     if skipped:
-        suggestions.append(f"有 {len(skipped)} 个存疑点被跳过，建议补充相关经历描述。")
+        suggestions.append(f"有 {skipped} 个存疑点被跳过，建议补充相关经历描述。")
     if overall_score >= 80:
         suggestions.append("整体表现优秀，简历内容可信度高。")
     elif overall_score >= 60:
