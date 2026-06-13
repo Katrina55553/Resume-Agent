@@ -3,11 +3,6 @@
 测试 FastAPI 端点。
 """
 
-import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, patch
-
-
 class TestHealthCheck:
     """健康检查测试"""
 

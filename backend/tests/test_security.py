@@ -3,14 +3,13 @@
 测试文件上传校验、Prompt 注入检测、脱敏功能。
 """
 
-import pytest
-from app.utils.security.prompt_guard import detect_injection, sanitize_input
 from app.utils.security.masking import (
     mask_phone,
     mask_email,
     mask_name,
     mask_id_card,
 )
+from app.utils.security.prompt_guard import detect_injection, sanitize_input
 
 
 class TestPromptInjection:
