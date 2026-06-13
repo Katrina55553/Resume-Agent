@@ -5,17 +5,16 @@ LLM 可用时调用 DeepSeek，否则降级到规则诊断。
 """
 
 import json
-import time
 import uuid
 from datetime import datetime
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session as DBSession
 
-from app.tasks.celery_app import celery_app
 from app.core.config import settings
 from app.core.llm import call_llm_json, is_llm_available
 from app.models.session import Session, SessionStatus
+from app.tasks.celery_app import celery_app
 
 # 延迟创建同步引擎
 _sync_engine = None
@@ -260,4 +259,4 @@ def diagnose_resume(self, session_id: str) -> dict:
                     db.commit()
         except Exception:
             pass
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc

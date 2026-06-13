@@ -3,7 +3,6 @@
 对敏感信息进行脱敏处理，确保日志安全。
 """
 
-import re
 import logging
 from typing import Any
 
@@ -37,10 +36,7 @@ def mask_email(email: str) -> str:
     if not email or "@" not in email:
         return "***"
     local, domain = email.split("@", 1)
-    if len(local) <= 2:
-        masked_local = "*" * len(local)
-    else:
-        masked_local = local[0] + "***" + local[-1]
+    masked_local = "*" * len(local) if len(local) <= 2 else local[0] + "***" + local[-1]
     return f"{masked_local}@{domain}"
 
 

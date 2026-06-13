@@ -4,9 +4,10 @@
 匹配设计文档中的存疑点结构：priority(high/medium/low), source_text, reason, probe_questions
 """
 
-from pydantic import BaseModel, Field, field_validator
-from typing import Literal
 from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class DoubtPoint(BaseModel):

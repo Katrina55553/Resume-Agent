@@ -3,11 +3,11 @@
 控制请求频率和 Token 使用量。
 """
 
-from fastapi import Request, HTTPException
+import time
+
+from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-
-import time
 
 from app.core.config import settings
 from app.core.redis import get_redis

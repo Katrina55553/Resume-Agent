@@ -6,16 +6,22 @@ ORM 模型负责数据库持久化，Pydantic 模型负责 API 交互。
 
 import uuid
 from datetime import datetime
-
-from sqlalchemy import (
-    Column, String, Integer, Text, Boolean, DateTime, JSON, ForeignKey,
-)
-from sqlalchemy.dialects.postgresql import UUID
-from pydantic import BaseModel, Field
 from typing import Literal
 
-from app.core.database import Base
+from pydantic import BaseModel, Field
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import UUID
 
+from app.core.database import Base
 
 # ============================================================
 # ORM 模型 —— 面试状态 & 消息持久化
@@ -104,7 +110,7 @@ class InterviewStartResponse(BaseModel):
     point_id: str
     round: int = 1
     total_points: int
-    point_list: list[Dict | None] = None
+    point_list: list[dict | None] = None
 
 
 class InterviewRespondRequest(BaseModel):
@@ -121,7 +127,7 @@ class InterviewRespondResponse(BaseModel):
     round: int | None = None
     point_states: dict[str, str | None] = None
     progress: float = 0.0
-    report: Dict | None = None
+    report: dict | None = None
 
 
 class InterviewResumeResponse(BaseModel):
@@ -130,13 +136,13 @@ class InterviewResumeResponse(BaseModel):
     current_point_index: int
     current_round: int
     point_states: dict[str, str]
-    messages: list[Dict]
+    messages: list[dict]
     is_completed: bool
-    report: Dict | None = None
+    report: dict | None = None
     total_points: int
     current_question: str | None = None
     current_point_id: str | None = None
-    point_list: list[Dict | None] = None
+    point_list: list[dict | None] = None
 
 
 class WSIncomingMessage(BaseModel):
@@ -153,5 +159,5 @@ class WSOutgoingMessage(BaseModel):
     round: int | None = None
     point_states: dict[str, str | None] = None
     progress: float | None = None
-    report: Dict | None = None
+    report: dict | None = None
     error: str | None = None

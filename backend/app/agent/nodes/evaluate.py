@@ -17,7 +17,6 @@ from app.core.llm import (
 )
 from app.core.tools import execute_tool, get_tools
 
-
 # ---------- 规则评分（降级方案）----------
 
 def _rule_score_answer(answer_text: str, current_round: int) -> tuple:

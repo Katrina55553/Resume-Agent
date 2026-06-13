@@ -6,9 +6,9 @@
 
 import json
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
 
-from app.core.rag import retrieve_context, extract_technical_keywords
+from app.core.rag import extract_technical_keywords, retrieve_context
 
 logger = logging.getLogger(__name__)
 

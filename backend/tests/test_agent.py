@@ -4,7 +4,8 @@
 """
 
 import pytest
-from app.agent.rules import InterviewRules, should_force_switch, DEFAULT_RULES
+
+from app.agent.rules import DEFAULT_RULES, InterviewRules, should_force_switch
 
 
 class TestInterviewRules:

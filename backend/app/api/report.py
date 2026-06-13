@@ -3,8 +3,8 @@
 查询面试评估报告。
 """
 
+import contextlib
 import json
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,8 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.session import Session, SessionStatus
 from app.models.interview import InterviewStateORM
+from app.models.session import Session
 
 router = APIRouter()
 
@@ -62,10 +62,8 @@ async def get_report(
 
     report = {}
     if interview.report_json:
-        try:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
             report = json.loads(interview.report_json)
-        except (json.JSONDecodeError, TypeError):
-            pass
 
     return {
         "code": 0,

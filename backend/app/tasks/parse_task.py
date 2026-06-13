@@ -8,18 +8,16 @@
 import json
 import re
 import time
-import uuid
 from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session as DBSession
 
-from app.tasks.celery_app import celery_app
 from app.core.config import settings
 from app.core.llm import call_llm_json
 from app.models.session import Session, SessionStatus
-from app.utils.security.masking import mask_phone, mask_email, mask_id_card
+from app.tasks.celery_app import celery_app
 
 # 延迟创建同步引擎
 _sync_engine = None
@@ -74,7 +72,7 @@ def _extract_text(file_path: str) -> str:
     elif ext in (".docx", ".doc"):
         return _extract_text_docx(file_path)
     elif ext == ".txt":
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             return f.read()
     return ""
 
@@ -92,10 +90,7 @@ def _mask_raw_text(text: str) -> str:
     # 邮箱：zhangsan@example.com → z***n@example.com
     def _mask_email_match(m):
         local, domain = m.group(1), m.group(2)
-        if len(local) <= 2:
-            masked = "*" * len(local)
-        else:
-            masked = local[0] + "***" + local[-1]
+        masked = "*" * len(local) if len(local) <= 2 else local[0] + "***" + local[-1]
         return f"{masked}@{domain}"
     text = re.sub(r"([\w.+-]+)@([\w-]+\.[\w.-]+)", _mask_email_match, text)
     # 身份证号
@@ -288,4 +283,4 @@ def parse_resume(self, session_id: str, file_path: str) -> dict:
                     db.commit()
         except Exception:
             pass
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc

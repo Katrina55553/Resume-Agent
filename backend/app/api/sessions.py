@@ -3,22 +3,20 @@
 处理简历上传和会话状态查询。
 """
 
-import os
 import uuid as uuid_lib
-from pathlib import Path
 from datetime import datetime
-
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from pathlib import Path
 from typing import Any
 
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
-from app.core.config import settings
 from app.models.session import Session, SessionStatus
-from app.utils.security.file_upload import validate_upload_file
-from app.utils.security.masking import mask_phone, mask_email, mask_name
 from app.tasks.parse_task import parse_resume
+from app.utils.security.file_upload import validate_upload_file
+from app.utils.security.masking import mask_email, mask_name, mask_phone
 
 router = APIRouter()
 

@@ -4,10 +4,10 @@
 """
 
 from app.utils.security.masking import (
-    mask_phone,
     mask_email,
-    mask_name,
     mask_id_card,
+    mask_name,
+    mask_phone,
 )
 from app.utils.security.prompt_guard import detect_injection, sanitize_input
 

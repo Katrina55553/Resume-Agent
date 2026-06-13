@@ -3,16 +3,17 @@
 定义会话相关的数据库表结构。
 """
 
-from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Enum, Text, Float
-from sqlalchemy.dialects.postgresql import UUID
-import uuid
 import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Enum, Float, String, Text
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
 
 
-class SessionStatus(str, enum.Enum):
+class SessionStatus(str, enum.StrEnum):
     """会话状态枚举"""
     UPLOADED = "uploaded"
     PARSING = "parsing"

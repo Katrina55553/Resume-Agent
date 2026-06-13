@@ -3,8 +3,9 @@
 定义简历解析结果的 Pydantic 模型。
 """
 
-from pydantic import BaseModel, Field
 from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class WorkExperience(BaseModel):

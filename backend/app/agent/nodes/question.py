@@ -14,7 +14,6 @@ from app.core.llm import (
 )
 from app.core.tools import execute_tool, get_tools
 
-
 # ---------- 模板（降级方案）----------
 
 _INTRO_TEMPLATES = [

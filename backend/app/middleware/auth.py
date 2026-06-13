@@ -3,10 +3,8 @@
 从请求中提取和验证用户身份。
 """
 
-from fastapi import Request, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-from app.core.config import settings
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 # HTTP Bearer 认证方案
 security = HTTPBearer(auto_error=False)

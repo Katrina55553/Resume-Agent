@@ -40,7 +40,7 @@ def _load_knowledge_base() -> list[dict]:
 
     for json_file in KNOWLEDGE_DIR.glob("*.json"):
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
+            with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
             topic = data.get("topic", json_file.stem)
             for entry in data.get("entries", []):
@@ -78,7 +78,7 @@ def _get_embedding(text: str) -> list[float | None]:
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """计算余弦相似度"""
     import math
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
     if norm_a == 0 or norm_b == 0:

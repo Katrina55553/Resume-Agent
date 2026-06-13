@@ -3,11 +3,9 @@
 四重校验：扩展名、MIME 类型、魔数、文件大小。
 """
 
-import os
-from fastapi import UploadFile, HTTPException
+from fastapi import HTTPException, UploadFile
 
 from app.core.config import settings
-
 
 # 文件魔数映射
 FILE_SIGNATURES = {

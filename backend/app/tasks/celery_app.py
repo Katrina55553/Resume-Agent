@@ -47,6 +47,6 @@ celery_app.conf.update(
 )
 
 # 显式导入任务模块（autodiscover 只找 tasks.py，找不到 parse_task.py）
-import app.tasks.parse_task  # noqa: F401
-import app.tasks.diagnose_task  # noqa: F401
-import app.tasks.report_task  # noqa: F401
+import app.tasks.diagnose_task  # noqa: E402, F401
+import app.tasks.parse_task  # noqa: E402, F401
+import app.tasks.report_task  # noqa: E402, F401

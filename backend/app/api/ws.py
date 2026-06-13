@@ -8,33 +8,31 @@
 - start: 开始/恢复面试（重连时补推缓存消息）
 """
 
+import contextlib
 import json
-from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
-from app.core.database import async_session_maker
-from app.core.msg_cache import push_message, get_pending_messages
-from app.models.session import Session, SessionStatus
-from app.models.interview import InterviewStateORM, InterviewMessageORM
-from app.agent.nodes.question import generate_question
 from app.agent.nodes.collect import collect_answer
 from app.agent.nodes.evaluate import evaluate_answer
+from app.agent.nodes.question import generate_question
 from app.agent.nodes.report import generate_report
+from app.core.database import async_session_maker
+from app.core.msg_cache import get_pending_messages, push_message
+from app.models.interview import InterviewMessageORM, InterviewStateORM
+from app.models.session import Session
 
 router = APIRouter()
 
 # 活跃的 WebSocket 连接：session_id -> set of websockets
-active_connections: dict[str, Set[WebSocket]] = {}
+active_connections: dict[str, set[WebSocket]] = {}
 
 
 async def _send_json(websocket: WebSocket, data: dict) -> None:
     """发送 JSON 消息，吞掉连接已关闭的异常。"""
-    try:
+    with contextlib.suppress(Exception):
         await websocket.send_json(data)
-    except Exception:
-        pass
 
 
 async def _send_and_cache(
@@ -136,8 +134,9 @@ async def _save_message_to_db(
 ) -> None:
     """保存一条消息到数据库。"""
     async with async_session_maker() as db:
-        from app.models.interview import InterviewMessageORM
         import uuid as uuid_lib
+
+        from app.models.interview import InterviewMessageORM
         msg = InterviewMessageORM(
             id=uuid_lib.uuid4(),
             session_id=session_id,

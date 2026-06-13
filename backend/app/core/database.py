@@ -3,11 +3,10 @@
 使用 SQLAlchemy async engine 和 async session maker。
 """
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
-
 
 # 创建异步引擎
 engine = create_async_engine(
