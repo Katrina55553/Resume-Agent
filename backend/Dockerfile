@@ -1,23 +1,17 @@
-FROM python:3-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
 # 换华为云镜像源（加速 apt）
 RUN sed -i 's|deb.debian.org|repo.huaweicloud.com|g' /etc/apt/sources.list.d/debian.sources
 
-# 安装系统依赖（含 Rust 工具链，pydantic-core 需要）
+# 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
     libpq-dev \
     gcc \
     g++ \
-    curl \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    && . "$HOME/.cargo/env" \
     && rm -rf /var/lib/apt/lists/*
-
-# 确保 Rust 在 PATH 中
-ENV PATH="/root/.cargo/bin:${PATH}"
 
 # 复制依赖文件并安装
 COPY requirements.txt .
