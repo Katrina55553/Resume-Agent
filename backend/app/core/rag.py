@@ -8,7 +8,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from app.core.config import settings
 
@@ -18,15 +18,15 @@ logger = logging.getLogger(__name__)
 KNOWLEDGE_DIR = Path(__file__).parent.parent.parent / "knowledge"
 
 # 全局知识库缓存
-_knowledge_entries: List[dict] = []
+_knowledge_entries: list[dict] = []
 _knowledge_loaded = False
 
 # 向量索引缓存
-_embeddings: Optional[List[List[float]]] = None
-_embedding_entries: List[dict] = []
+_embeddings: Optional[list[list[float]]] = None
+_embedding_entries: list[dict] = []
 
 
-def _load_knowledge_base() -> List[dict]:
+def _load_knowledge_base() -> list[dict]:
     """加载 knowledge/ 目录下所有 JSON 文件"""
     global _knowledge_entries, _knowledge_loaded
 
@@ -57,7 +57,7 @@ def _load_knowledge_base() -> List[dict]:
     return entries
 
 
-def _get_embedding(text: str) -> Optional[List[float]]:
+def _get_embedding(text: str) -> Optional[list[float]]:
     """获取文本的 embedding 向量"""
     from app.core.llm import _get_client
 
@@ -76,7 +76,7 @@ def _get_embedding(text: str) -> Optional[List[float]]:
         return None
 
 
-def _cosine_similarity(a: List[float], b: List[float]) -> float:
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """计算余弦相似度"""
     import math
     dot = sum(x * y for x, y in zip(a, b))
@@ -120,7 +120,7 @@ def _build_embedding_index():
         logger.info(f"向量索引构建完成，共 {len(embeddings)} 条")
 
 
-def _vector_search(query: str, top_k: int = 3) -> List[dict]:
+def _vector_search(query: str, top_k: int = 3) -> list[dict]:
     """向量检索"""
     global _embeddings, _embedding_entries
 
@@ -145,7 +145,7 @@ def _vector_search(query: str, top_k: int = 3) -> List[dict]:
     return [e for _, e in scored[:top_k]]
 
 
-def _keyword_search(query: str, top_k: int = 3) -> List[dict]:
+def _keyword_search(query: str, top_k: int = 3) -> list[dict]:
     """关键词匹配检索（降级方案）"""
     entries = _load_knowledge_base()
     if not entries:
@@ -228,7 +228,7 @@ def retrieve_context(query: str, top_k: int = 3) -> str:
     return "\n\n".join(context_parts)
 
 
-def extract_technical_keywords(text: str) -> List[str]:
+def extract_technical_keywords(text: str) -> list[str]:
     """从文本中提取技术关键词"""
     tech_keywords = [
         "MySQL", "PostgreSQL", "MongoDB", "Redis", "Elasticsearch",

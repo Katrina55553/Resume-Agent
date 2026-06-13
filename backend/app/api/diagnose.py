@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Dict, Any
+from typing import Any
 
 from app.core.database import get_db
 from app.models.session import Session, SessionStatus
@@ -22,7 +22,7 @@ router = APIRouter()
 async def start_diagnose(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """触发简历诊断
 
     前提：简历已解析完成（status=parsed）
@@ -68,7 +68,7 @@ async def start_diagnose(
 async def get_diagnose_result(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """获取诊断结果
 
     诊断完成后返回：整体评估 + 存疑点列表 + 改进建议

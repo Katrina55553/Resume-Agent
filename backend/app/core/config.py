@@ -4,7 +4,7 @@
 支持 .env 文件和系统环境变量。
 """
 
-from typing import List
+
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 
@@ -49,13 +49,13 @@ class Settings(BaseSettings):
 
     @field_validator("CORS_ORIGINS")
     @classmethod
-    def parse_cors_origins(cls, v: str) -> List[str]:
+    def parse_cors_origins(cls, v: str) -> list[str]:
         """将逗号分隔的字符串解析为列表"""
         return [origin.strip() for origin in v.split(",")]
 
     @field_validator("ALLOWED_EXTENSIONS")
     @classmethod
-    def parse_allowed_extensions(cls, v: str) -> List[str]:
+    def parse_allowed_extensions(cls, v: str) -> list[str]:
         """将逗号分隔的字符串解析为列表"""
         return [ext.strip().lower() for ext in v.split(",")]
 

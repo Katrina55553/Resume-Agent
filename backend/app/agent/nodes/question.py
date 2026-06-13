@@ -5,7 +5,7 @@ LLM 可用时调用 DeepSeek（支持 Tool Calling），否则使用模板。
 LLM 可自主决定调用知识库检索、查看简历字段、验证代码。
 """
 
-from typing import Dict, Any, List
+from typing import Any
 
 from app.core.llm import (
     call_llm,
@@ -33,7 +33,7 @@ _FOLLOWUP_TEMPLATES = [
 
 def _template_question(doubt_point: dict, current_round: int) -> str:
     """模板生成问题（降级方案）"""
-    probes: List[str] = doubt_point.get("probe_questions", [])
+    probes: list[str] = doubt_point.get("probe_questions", [])
     probe_idx = current_round - 1
     if probe_idx < len(probes):
         return probes[probe_idx]
@@ -71,7 +71,7 @@ _QUESTION_SYSTEM_PROMPT = """你是一位经验丰富的技术面试官，正在
 
 def _llm_generate_question(
     doubt_point: dict,
-    messages: List[dict],
+    messages: list[dict],
     current_round: int,
     resume_data: dict = None,
 ) -> str:
@@ -155,12 +155,16 @@ def _llm_generate_question(
 # ---------- 节点函数 ----------
 
 
-async def generate_question(state: Dict[str, Any]) -> Dict[str, Any]:
-    """生成面试问题"""
-    doubt_points: List[dict] = state.get("doubt_points", [])
+async def generate_question(state: dict[str, Any]) -> dict[str, Any]:
+    """生成下一个面试问题
+
+    根据当前存疑点和对话历史，生成追问问题。
+    优先使用 LLM 生成，不可用时使用模板。
+    """
+    doubt_points: list[dict] = state.get("doubt_points", [])
     point_index: int = state.get("current_point_index", 0)
     current_round: int = state.get("current_round", 1)
-    messages: List[dict] = list(state.get("messages", []))
+    messages: list[dict] = list(state.get("messages", []))
     resume_data: dict = state.get("resume_data", {})
 
     if not doubt_points or point_index >= len(doubt_points):

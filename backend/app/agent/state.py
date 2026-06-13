@@ -3,7 +3,7 @@
 定义 LangGraph 状态机使用的 TypedDict。
 """
 
-from typing import TypedDict, List, Optional, Annotated
+from typing import Annotated, Optional, TypedDict
 from operator import add
 
 
@@ -19,7 +19,7 @@ class AgentState(TypedDict):
     # 简历数据
     resume_text: Optional[str]
     resume_summary: Optional[str]
-    doubt_points: List[dict]
+    doubt_points: list[dict]
 
     # 面试状态
     phase: str  # InterviewPhase value
@@ -33,7 +33,7 @@ class AgentState(TypedDict):
     current_answer: Optional[str]
 
     # 消息历史（使用 Annotated 支持 reducer）
-    messages: Annotated[List[dict], add]
+    messages: Annotated[list[dict], add]
 
     # 评估结果
     current_evaluation: Optional[dict]

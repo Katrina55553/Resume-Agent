@@ -4,7 +4,7 @@
 """
 
 import re
-from typing import List, Tuple
+
 
 
 # 常见的 Prompt 注入模式
@@ -39,7 +39,7 @@ INJECTION_PATTERNS = [
 COMPILED_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in INJECTION_PATTERNS]
 
 
-def detect_injection(text: str) -> Tuple[bool, List[str]]:
+def detect_injection(text: str) -> tuple[bool, list[str]]:
     """检测 Prompt 注入
 
     Args:

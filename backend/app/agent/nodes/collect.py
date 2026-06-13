@@ -3,12 +3,12 @@
 处理用户回答：验证、记录到消息列表。
 """
 
-from typing import Dict, Any, List
+from typing import Any
 
 from app.agent.rules import DEFAULT_RULES
 
 
-async def collect_answer(state: Dict[str, Any]) -> Dict[str, Any]:
+async def collect_answer(state: dict[str, Any]) -> dict[str, Any]:
     """收集和处理用户回答
 
     将用户回答添加到消息列表，返回状态更新。
@@ -26,7 +26,7 @@ async def collect_answer(state: Dict[str, Any]) -> Dict[str, Any]:
         状态更新字典，包含更新后的 messages。
     """
     answer_text: str = state.get("current_answer", "")
-    doubt_points: List[dict] = state.get("doubt_points", [])
+    doubt_points: list[dict] = state.get("doubt_points", [])
     point_index: int = state.get("current_point_index", 0)
 
     # 获取当前存疑点 ID（用于消息关联）

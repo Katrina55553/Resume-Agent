@@ -6,7 +6,7 @@
 
 import json
 import uuid as uuid_lib
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +35,7 @@ router = APIRouter()
 # ============================================================
 
 
-def _extract_doubt_points(session: Session) -> List[dict]:
+def _extract_doubt_points(session: Session) -> list[dict]:
     """从 session 的 parsed_content 中提取存疑点列表。
 
     存疑点存储路径：parsed_content -> diagnose_result -> doubt_points
@@ -50,7 +50,7 @@ def _extract_doubt_points(session: Session) -> List[dict]:
     return diagnose_result.get("doubt_points", [])
 
 
-def _build_point_states(doubt_points: List[dict]) -> Dict[str, str]:
+def _build_point_states(doubt_points: list[dict]) -> dict[str, str]:
     """初始化各存疑点的状态。
 
     第一个点标记为 active，其余为 pending。
@@ -63,9 +63,9 @@ def _build_point_states(doubt_points: List[dict]) -> Dict[str, str]:
 
 
 def _build_point_state_list(
-    doubt_points: List[dict],
-    point_states: Dict[str, str],
-) -> List[dict]:
+    doubt_points: list[dict],
+    point_states: dict[str, str],
+) -> list[dict]:
     """将存疑点 + 状态字典合并为前端需要的完整列表。
 
     返回 [{id, source_text, priority, status}, ...]
@@ -252,9 +252,9 @@ def _compute_progress(state: dict) -> float:
 )
 async def start_interview(
     session_id: str,
-    body: Dict[str, Any] = Body(default={}),
+    body: dict[str, Any] = Body(default={}),
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """开始面试
 
     校验会话状态 → 创建 InterviewState → 生成第一个问题 → 保存消息。
@@ -401,7 +401,7 @@ async def respond_interview(
     session_id: str,
     body: InterviewRespondRequest,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """提交回答
 
     流程：保存回答 → collect → evaluate → 根据决策生成下一问题 / 生成报告。
@@ -543,7 +543,7 @@ async def respond_interview(
 async def skip_current_point(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """跳过当前存疑点
 
     将当前存疑点标记为 skipped，切换到下一个，生成新问题。
@@ -655,7 +655,7 @@ async def skip_current_point(
 async def rephrase_question(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """换个问法
 
     重新生成当前存疑点的问题（不增加轮次）。
@@ -715,7 +715,7 @@ async def rephrase_question(
 async def resume_interview(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """恢复面试（断点续传）
 
     返回当前面试的完整状态，包括消息历史和当前问题。
@@ -772,7 +772,7 @@ async def resume_interview(
 async def end_interview(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """结束面试并生成报告
 
     用户主动结束面试，用当前已有的评估数据生成报告。

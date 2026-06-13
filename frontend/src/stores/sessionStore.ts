@@ -68,8 +68,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const { session_id, status } = res.data.data;
       set({ sessionId: session_id, status: status || 'parsing', progress: 0.1 });
       return session_id;
-    } catch (err: any) {
-      const msg = err.response?.data?.detail?.message || err.message || '上传失败';
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: { message?: string } } }; message?: string };
+      const msg = e.response?.data?.detail?.message || e.message || '上传失败';
       set({ status: 'failed', error: msg });
       throw err;
     }

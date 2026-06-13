@@ -6,7 +6,7 @@
 
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Optional
 
 from app.core.rag import retrieve_context, extract_technical_keywords
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # 工具定义（OpenAI Function Calling 格式）
 # ============================================================
 
-TOOLS: List[dict] = [
+TOOLS: list[dict] = [
     {
         "type": "function",
         "function": {
@@ -150,7 +150,7 @@ def verify_code_snippet(code: str, language: str, context: str = "") -> str:
 # ============================================================
 
 # 工具名 → 执行函数的映射
-_TOOL_REGISTRY: Dict[str, Callable] = {
+_TOOL_REGISTRY: dict[str, Callable] = {
     "search_knowledge_base": lambda args: search_knowledge_base(
         query=args.get("query", ""),
     ),
@@ -197,6 +197,6 @@ def execute_tool(
         return f"工具执行失败: {str(e)}"
 
 
-def get_tools() -> List[dict]:
+def get_tools() -> list[dict]:
     """获取工具定义列表（供 LLM function calling 使用）"""
     return TOOLS

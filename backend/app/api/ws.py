@@ -9,7 +9,7 @@
 """
 
 import json
-from typing import Dict, Set
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
@@ -26,7 +26,7 @@ from app.agent.nodes.report import generate_report
 router = APIRouter()
 
 # 活跃的 WebSocket 连接：session_id -> set of websockets
-active_connections: Dict[str, Set[WebSocket]] = {}
+active_connections: dict[str, Set[WebSocket]] = {}
 
 
 async def _send_json(websocket: WebSocket, data: dict) -> None:

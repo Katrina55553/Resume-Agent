@@ -11,7 +11,7 @@ from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Dict, Any
+from typing import Any
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -30,7 +30,7 @@ UPLOAD_DIR = Path("uploads")
 async def create_session(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """创建会话并上传简历
 
     流程：四重校验 → 保存文件 → 创建 DB 记录 → 触发 Celery 异步解析
@@ -88,7 +88,7 @@ async def create_session(
 async def get_session_status(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """查询会话解析进度
 
     前端轮询此接口，直到 status 变为 parsed 或 failed。
@@ -128,7 +128,7 @@ async def get_session_status(
 async def get_parse_result(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """获取简历解析结果
 
     解析完成后返回结构化数据，供前端展示和用户修正。
@@ -175,9 +175,9 @@ async def get_parse_result(
 @router.put("/sessions/{session_id}/parse")
 async def update_parse_result(
     session_id: str,
-    body: Dict[str, Any],
+    body: dict[str, Any],
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """用户修正解析结果
 
     前端内联编辑后提交修正，更新 parsed_content。

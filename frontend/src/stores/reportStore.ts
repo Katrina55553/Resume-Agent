@@ -45,8 +45,9 @@ export const useReportStore = create<ReportState>((set) => ({
       }
 
       set({ report: data.report, status: 'done' });
-    } catch (err: any) {
-      const msg = err.response?.data?.detail?.message || err.message || '获取报告失败';
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: { message?: string } } }; message?: string };
+      const msg = e.response?.data?.detail?.message || e.message || '获取报告失败';
       set({ status: 'error', error: msg });
     }
   },

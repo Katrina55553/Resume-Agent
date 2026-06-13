@@ -60,8 +60,9 @@ export const useDiagnoseStore = create<DiagnoseState>((set, get) => ({
           selectedIds: data.result?.doubt_points?.map((p: DoubtPoint) => p.id) || [],
           status: 'done',
         });
-      } catch (err: any) {
-        const msg = err.response?.data?.detail?.message || err.message || '获取诊断结果失败';
+      } catch (err: unknown) {
+        const e = err as { response?: { data?: { detail?: { message?: string } } }; message?: string };
+        const msg = e.response?.data?.detail?.message || e.message || '获取诊断结果失败';
         set({ status: 'error', error: msg });
       }
     };

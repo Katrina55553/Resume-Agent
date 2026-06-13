@@ -6,7 +6,7 @@ LLM 可用时调用 DeepSeek 进行智能评估，否则使用规则评分。
 """
 
 import json
-from typing import Dict, Any, List
+from typing import Any
 
 from app.core.llm import (
     call_llm_json,
@@ -168,15 +168,15 @@ import re
 # ---------- 节点函数 ----------
 
 
-async def evaluate_answer(state: Dict[str, Any]) -> Dict[str, Any]:
+async def evaluate_answer(state: dict[str, Any]) -> dict[str, Any]:
     """评估用户回答并决定下一步"""
     answer_text: str = state.get("current_answer", "")
     current_round: int = state.get("current_round", 1)
     point_index: int = state.get("current_point_index", 0)
-    doubt_points: List[dict] = state.get("doubt_points", [])
+    doubt_points: list[dict] = state.get("doubt_points", [])
     point_states: dict = dict(state.get("point_states", {}))
     answer_too_short: bool = state.get("answer_too_short", False)
-    messages: List[dict] = state.get("messages", [])
+    messages: list[dict] = state.get("messages", [])
     resume_data: dict = state.get("resume_data", {})
 
     # 获取当前存疑点和问题

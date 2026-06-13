@@ -72,7 +72,7 @@ export default function HomePage() {
   // 进入首页时清空旧 session，避免残留状态导致自动跳转
   useEffect(() => {
     reset();
-  }, []);
+  }, [reset]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">

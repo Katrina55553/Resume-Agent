@@ -5,7 +5,7 @@
 
 import re
 import logging
-from typing import Any, Dict
+from typing import Any
 
 # 获取安全日志记录器
 security_logger = logging.getLogger("security")
@@ -74,7 +74,7 @@ def mask_name(name: str) -> str:
     return name[0] + "*" * (len(name) - 1)
 
 
-def mask_sensitive_data(data: Dict[str, Any]) -> Dict[str, Any]:
+def mask_sensitive_data(data: dict[str, Any]) -> dict[str, Any]:
     """脱敏敏感数据
 
     Args:
@@ -108,7 +108,7 @@ def log_security_event(
     event_type: str,
     user_id: str = None,
     ip_address: str = None,
-    details: Dict[str, Any] = None,
+    details: dict[str, Any] = None,
 ) -> None:
     """记录安全事件
 

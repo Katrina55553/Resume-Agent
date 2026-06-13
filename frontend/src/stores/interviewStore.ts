@@ -64,13 +64,13 @@ function getWsUrl(sessionId: string): string {
 }
 
 /** 将后端 point_list 映射为 PointState[] */
-function mapPointList(pointList: any[] | undefined, fallback: PointState[]): PointState[] {
+function mapPointList(pointList: Record<string, unknown>[] | undefined, fallback: PointState[]): PointState[] {
   if (pointList && Array.isArray(pointList)) {
-    return pointList.map((p: any) => ({
-      id: p.id,
-      source_text: p.source_text || '',
-      priority: p.priority || 'low',
-      status: p.status || 'pending',
+    return pointList.map((p) => ({
+      id: p.id as string,
+      source_text: (p.source_text as string) || '',
+      priority: (p.priority as string) || 'low',
+      status: (p.status as string) || 'pending',
     }));
   }
   return fallback;
@@ -123,13 +123,14 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
 
       // 2. 连接 WebSocket
       get()._connectWs(sessionId);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number; data?: { detail?: { message?: string } } }; message?: string };
       // 400 = 面试已存在，尝试 resume
-      if (err.response?.status === 400) {
+      if (e.response?.status === 400) {
         await get().resumeInterview(sessionId);
         return;
       }
-      const msg = err.response?.data?.detail?.message || err.message || '启动面试失败';
+      const msg = e.response?.data?.detail?.message || e.message || '启动面试失败';
       set({ status: 'error', error: msg });
     }
   },
@@ -158,8 +159,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       if (!data.is_complete) {
         get()._connectWs(sessionId);
       }
-    } catch (err: any) {
-      const msg = err.response?.data?.detail?.message || err.message || '恢复面试失败';
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: { message?: string } } }; message?: string };
+      const msg = e.response?.data?.detail?.message || e.message || '恢复面试失败';
       set({ status: 'error', error: msg });
     }
   },
@@ -331,8 +333,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         report: data.report || null,
         progress: 1,
       });
-    } catch (err: any) {
-      const msg = err.response?.data?.detail?.message || err.message || '结束面试失败';
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: { message?: string } } }; message?: string };
+      const msg = e.response?.data?.detail?.message || e.message || '结束面试失败';
       console.error('[结束面试] API 错误:', msg);
       set({ error: msg, status: 'error' });
     }

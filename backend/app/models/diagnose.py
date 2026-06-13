@@ -5,7 +5,7 @@
 """
 
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Literal, Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 
@@ -15,11 +15,11 @@ class DoubtPoint(BaseModel):
     priority: Literal["high", "medium", "low"] = Field(..., description="优先级")
     source_text: str = Field(..., description="简历原文引用")
     reason: str = Field(..., description="存疑原因")
-    probe_questions: List[str] = Field(default_factory=list, description="建议追问问题")
+    probe_questions: list[str] = Field(default_factory=list, description="建议追问问题")
 
     @field_validator("probe_questions")
     @classmethod
-    def check_questions(cls, v: List[str]) -> List[str]:
+    def check_questions(cls, v: list[str]) -> list[str]:
         if not v or len(v) == 0:
             raise ValueError("probe_questions 不能为空")
         if len(v) > 5:
@@ -50,13 +50,13 @@ class DiagnoseResult(BaseModel):
     """诊断结果"""
     session_id: str = Field(..., description="会话 ID")
     overall: OverallAssessment = Field(..., description="整体评估")
-    doubt_points: List[DoubtPoint] = Field(default_factory=list, description="存疑点列表")
-    suggestions: List[str] = Field(default_factory=list, description="改进建议")
+    doubt_points: list[DoubtPoint] = Field(default_factory=list, description="存疑点列表")
+    suggestions: list[str] = Field(default_factory=list, description="改进建议")
     diagnosed_at: datetime = Field(default_factory=datetime.utcnow, description="诊断时间")
 
     @field_validator("doubt_points")
     @classmethod
-    def validate_points(cls, v: List[DoubtPoint]) -> List[DoubtPoint]:
+    def validate_points(cls, v: list[DoubtPoint]) -> list[DoubtPoint]:
         seen = set()
         for p in v:
             if p.source_text in seen:

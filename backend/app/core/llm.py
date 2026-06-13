@@ -8,7 +8,7 @@
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 from openai import OpenAI
 
@@ -103,7 +103,7 @@ def is_llm_available() -> bool:
     return bool(settings.LLM_API_KEY)
 
 
-def _parse_tool_calls_from_text(content: str) -> List[Dict[str, Any]]:
+def _parse_tool_calls_from_text(content: str) -> list[dict[str, Any]]:
     """从文本内容中解析工具调用（兼容 DeepSeek 等不支持结构化 tool_calls 的模型）。
 
     DeepSeek 实际输出格式：
@@ -184,10 +184,10 @@ def _extract_json_near_tool(content: str, func_name: str) -> dict:
 def call_llm_with_tools(
     system_prompt: str,
     user_prompt: str,
-    tools: List[dict],
+    tools: list[dict],
     temperature: float = 0.7,
     max_tokens: int = 2048,
-) -> Tuple[Optional[str], List[Dict[str, Any]]]:
+) -> tuple[Optional[str], list[dict[str, Any]]]:
     """调用 LLM 并支持 Tool Calling。
 
     先尝试结构化 tool_calls（OpenAI 格式），
@@ -251,8 +251,8 @@ def call_llm_with_tools(
 
 def continue_with_tool_results(
     system_prompt: str,
-    messages: List[dict],
-    tool_results: List[Dict[str, str]],
+    messages: list[dict],
+    tool_results: list[dict[str, str]],
     temperature: float = 0.7,
     max_tokens: int = 2048,
 ) -> Optional[str]:

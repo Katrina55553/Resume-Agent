@@ -7,7 +7,7 @@ LLM 可用时调用 DeepSeek 生成个性化报告，否则使用规则生成。
 import asyncio
 import json
 import logging
-from typing import Dict, Any, List
+from typing import Any
 
 from app.core.llm import call_llm_json, is_llm_available
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # ---------- 规则报告（降级方案）----------
 
-def _compute_overall_score(evaluations: List[dict]) -> int:
+def _compute_overall_score(evaluations: list[dict]) -> int:
     """根据所有评估结果计算综合得分"""
     if not evaluations:
         return 0
@@ -25,10 +25,10 @@ def _compute_overall_score(evaluations: List[dict]) -> int:
 
 
 def _extract_point_feedback(
-    doubt_points: List[dict],
+    doubt_points: list[dict],
     point_states: dict,
-    evaluations: List[dict],
-) -> List[dict]:
+    evaluations: list[dict],
+) -> list[dict]:
     """为每个存疑点生成逐点反馈"""
     feedbacks = []
     for i, point in enumerate(doubt_points):
@@ -176,7 +176,7 @@ def _llm_generate_report(state: dict) -> dict:
 # ---------- 节点函数 ----------
 
 
-async def generate_report(state: Dict[str, Any]) -> Dict[str, Any]:
+async def generate_report(state: dict[str, Any]) -> dict[str, Any]:
     """生成面试报告
 
     汇总所有对话和评估结果，生成最终报告。

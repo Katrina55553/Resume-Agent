@@ -12,7 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from pydantic import BaseModel, Field
-from typing import List, Optional, Literal, Dict
+from typing import Literal, Optional
 
 from app.core.database import Base
 
@@ -104,7 +104,7 @@ class InterviewStartResponse(BaseModel):
     point_id: str
     round: int = 1
     total_points: int
-    point_list: Optional[List[Dict]] = None
+    point_list: Optional[list[Dict]] = None
 
 
 class InterviewRespondRequest(BaseModel):
@@ -119,7 +119,7 @@ class InterviewRespondResponse(BaseModel):
     question: Optional[str] = None
     point_id: Optional[str] = None
     round: Optional[int] = None
-    point_states: Optional[Dict[str, str]] = None
+    point_states: Optional[dict[str, str]] = None
     progress: float = 0.0
     report: Optional[Dict] = None
 
@@ -129,14 +129,14 @@ class InterviewResumeResponse(BaseModel):
     session_id: str
     current_point_index: int
     current_round: int
-    point_states: Dict[str, str]
-    messages: List[Dict]
+    point_states: dict[str, str]
+    messages: list[Dict]
     is_completed: bool
     report: Optional[Dict] = None
     total_points: int
     current_question: Optional[str] = None
     current_point_id: Optional[str] = None
-    point_list: Optional[List[Dict]] = None
+    point_list: Optional[list[Dict]] = None
 
 
 class WSIncomingMessage(BaseModel):
@@ -151,7 +151,7 @@ class WSOutgoingMessage(BaseModel):
     content: Optional[str] = None
     point_id: Optional[str] = None
     round: Optional[int] = None
-    point_states: Optional[Dict[str, str]] = None
+    point_states: Optional[dict[str, str]] = None
     progress: Optional[float] = None
     report: Optional[Dict] = None
     error: Optional[str] = None

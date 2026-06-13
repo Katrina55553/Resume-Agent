@@ -3,7 +3,8 @@
 定义面试流程的状态图。
 """
 
-from typing import Dict, Any
+from typing import Any
+
 from langgraph.graph import StateGraph, END
 
 from app.agent.state import AgentState
@@ -14,7 +15,7 @@ from app.agent.nodes.report import generate_report
 from app.agent.rules import should_force_switch
 
 
-def should_continue(state: Dict[str, Any]) -> str:
+def should_continue(state: dict[str, Any]) -> str:
     """判断是否继续面试
 
     Args:

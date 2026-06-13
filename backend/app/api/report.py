@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Dict, Any
+from typing import Any
 
 from app.core.database import get_db
 from app.models.session import Session, SessionStatus
@@ -22,7 +22,7 @@ router = APIRouter()
 async def get_report(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """获取面试评估报告
 
     从 InterviewStateORM 中读取 report 字段。

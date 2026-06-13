@@ -7,7 +7,7 @@
 import json
 import logging
 import time
-from typing import List, Dict, Any
+from typing import Any
 
 from app.core.redis import get_redis
 
@@ -45,7 +45,7 @@ async def push_message(session_id: str, msg_type: str, data: dict) -> None:
         logger.error(f"消息缓存写入失败: {e}")
 
 
-async def get_pending_messages(session_id: str) -> List[Dict[str, Any]]:
+async def get_pending_messages(session_id: str) -> list[dict[str, Any]]:
     """获取并清空所有待消费消息
 
     原子操作：读取 + 删除，防止重复消费。
