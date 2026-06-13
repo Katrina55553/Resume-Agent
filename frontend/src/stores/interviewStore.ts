@@ -69,8 +69,8 @@ function mapPointList(pointList: Record<string, unknown>[] | undefined, fallback
     return pointList.map((p) => ({
       id: p.id as string,
       source_text: (p.source_text as string) || '',
-      priority: (p.priority as string) || 'low',
-      status: (p.status as string) || 'pending',
+      priority: (p.priority as PointState['priority']) || 'low',
+      status: (p.status as PointState['status']) || 'pending',
     }));
   }
   return fallback;
@@ -79,7 +79,7 @@ function mapPointList(pointList: Record<string, unknown>[] | undefined, fallback
 /** 将 point_states 字典合并到现有数组 */
 function mergePointStates(existing: PointState[], states: Record<string, string> | undefined): PointState[] {
   if (!states) return existing;
-  return existing.map(p => ({ ...p, status: (states[p.id] as string) || p.status }));
+  return existing.map(p => ({ ...p, status: (states[p.id] as PointState['status']) || p.status }));
 }
 
 let ws: WebSocket | null = null;
