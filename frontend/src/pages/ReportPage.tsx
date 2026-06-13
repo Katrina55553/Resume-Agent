@@ -133,19 +133,10 @@ export default function ReportPage() {
         {/* 操作按钮 */}
         <div className="flex justify-center gap-4 pt-4">
           <button
-            onClick={() => {
-              useInterviewStore.getState().reset();
-              navigate(`/session/${id}/interview`);
-            }}
-            className="rounded-xl border border-gray-300 px-8 py-3 text-gray-700 font-medium hover:bg-gray-50 transition"
-          >
-            重新面试
-          </button>
-          <button
             onClick={() => navigate('/')}
             className="rounded-xl bg-blue-600 px-8 py-3 text-white font-medium hover:bg-blue-700 transition"
           >
-            上传新简历
+            回到首页
           </button>
         </div>
       </div>
