@@ -129,7 +129,7 @@ export default function InterviewPage() {
         </button>
         <div className="flex items-center gap-3">
           {/* 语音开关 */}
-          {voice.isSupported && (
+          {voice.isSupported ? (
             <button
               onClick={voice.toggleVoice}
               className={`px-3 py-1 text-xs rounded-full border transition ${
@@ -141,6 +141,10 @@ export default function InterviewPage() {
             >
               {voice.voiceEnabled ? '🎙 语音模式' : '🎙 语音'}
             </button>
+          ) : (
+            <span className="text-xs text-gray-400" title="语音功能需要通过 HTTPS 访问">
+              🎙 语音不可用
+            </span>
           )}
           <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-400'}`}
             title={wsConnected ? '实时连接中' : '连接断开'} />

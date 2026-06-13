@@ -14,7 +14,9 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [isSupported] = useState(() => {
-    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    const hasAPI = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    const isSecure = window.isSecureContext;
+    return hasAPI && isSecure;
   });
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -55,8 +57,14 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
       }
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error('[Voice] 语音识别错误:', event.error, event.message);
       setIsListening(false);
+      if (event.error === 'not-allowed') {
+        alert('请允许浏览器使用麦克风权限');
+      } else if (event.error === 'network') {
+        alert('语音识别需要网络连接，且必须通过 HTTPS 访问');
+      }
     };
 
     recognition.onend = () => {
