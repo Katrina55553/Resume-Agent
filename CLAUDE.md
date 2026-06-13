@@ -4,98 +4,117 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-**简历智诊 Agent** — AI 驱动的简历诊断与模拟面试系统。用户上传简历 → AI 深度诊断 → 多轮模拟面试 → 量化评估报告。
-
-设计文档：`AI 简历诊断 + 模拟面试 Agent — 完整流程文档.txt`（所有需求细节以此为准）
+**简历智诊 Agent** — AI 驱动的简历诊断与模拟面试系统。用户上传简历 → AI 结构化解析 → 诊断存疑点 → 多轮模拟面试（WebSocket 实时对话）→ 量化评估报告。
 
 ## 技术栈
 
 | 层 | 技术 |
 |----|------|
-| 前端 | React 18 + TypeScript + Vite + Tailwind CSS + Zustand + React Router v6 + Axios + React Query |
-| 后端 | FastAPI (Python) + LangGraph (Agent 编排) + Celery + Redis (异步任务) |
-| LLM | Claude API / GPT-4o |
-| 数据库 | PostgreSQL (结构化数据) + Redis (缓存/限流/WebSocket 状态) |
-| 可观测 | OpenTelemetry + Prometheus + Grafana |
-| 部署 | Docker Compose |
+| 前端 | React 18 + TypeScript + Vite + Tailwind CSS 4 + Zustand + React Router v6 + Axios |
+| 后端 | FastAPI (Python 3.12) + LangGraph (Agent 编排) + Celery + Redis (异步任务) |
+| LLM | DeepSeek API（OpenAI 兼容格式），支持任意 OpenAI-compatible 第三方 API |
+| 数据库 | PostgreSQL 16 (结构化数据) + Redis 7 (缓存/Celery Broker/WebSocket 消息队列) |
+| 部署 | Docker Compose (Nginx + Backend + Celery + PostgreSQL + Redis) |
+
+## 构建与部署
+
+```bash
+# 本地开发
+cd frontend && npm install && npm run dev    # 前端 dev server (port 5173)
+cd backend && uvicorn app.main:app --reload  # 后端 dev server (port 8000)
+
+# Docker 部署
+docker compose build
+docker compose up -d
+
+# 单独重建某个服务
+docker compose up -d --build backend celery
+docker compose up -d --build frontend
+
+# 查看日志
+docker compose logs backend --tail 50
+docker compose logs celery --tail 50
+```
+
+前端生产构建：`cd frontend && npm run build`，产物在 `dist/` 目录，由 Nginx 容器直接 serve。
 
 ## 核心架构
 
-### 用户流程（4 步）
+### 用户流程
 
-1. **简历上传** — PDF/Word/TXT，Celery 异步解析，前端轮询进度
-2. **解析确认** — AI 结构化提取 + 用户内联编辑修正
-3. **诊断报告** — AI 标注存疑点（高/中/低优先级），用户勾选面试范围
+1. **简历上传** — PDF/Word/TXT，四重校验（扩展名+MIME+魔数+大小），Celery 异步解析
+2. **解析确认** — AI 结构化提取（DeepSeek LLM 或规则降级），用户内联编辑修正
+3. **诊断报告** — AI 识别存疑点（高/中/低优先级），用户勾选面试范围
 4. **模拟面试** — WebSocket 实时对话，LangGraph 状态机驱动动态追问
 5. **评估报告** — 可信度评分 + 逐点反馈 + 改进建议
 
-### LangGraph Agent 状态机
+### 面试 Agent 架构
 
-核心循环：`question → collect → evaluate`，evaluate 后条件分支：
-- `follow_up` → 继续追问当前存疑点
-- `next` → 切换到下一个存疑点
-- `report` → 生成最终报告
-
-状态定义见 `agent/state.py`（`AgentState` TypedDict），图定义见 `agent/graph.py`。
-
-### 追问防死循环（三层保障）
-
-1. 单点最多追问 3 轮，超限强制切换
-2. 用户可主动跳过
-3. 连续异常 3 次触发熔断
-
-规则引擎在 `agent/rules.py`（`InterviewRules` 类）。
-
-### 上下文压缩策略
-
-面试 prompt 只包含：简历关键字段（~200 tokens）+ 最近 6 轮对话（~500 tokens）+ 已确认技能点（~100 tokens），单次面试 Token 控制在 5000 以内。
-
-## 项目结构（规划）
+核心循环在 `backend/app/agent/nodes/`：
 
 ```
-frontend/              # React SPA
-├── src/
-│   ├── components/    # 按功能模块分：Upload/, Parse/, Diagnose/, Interview/, Report/, shared/
-│   ├── pages/         # HomePage, ParsePage, DiagnosePage, InterviewPage, ReportPage
-│   ├── stores/        # Zustand：sessionStore, diagnoseStore, interviewStore, reportStore
-│   ├── hooks/         # useWebSocket（封装 WS + 自动重连 + 消息队列）, usePolling
-│   └── utils/         # api.ts (Axios 封装), constants.ts
-
-backend/               # FastAPI
-├── app/
-│   ├── api/           # 路由：sessions, diagnose, interview, report, ws
-│   ├── core/          # config, database, redis 连接
-│   ├── models/        # Pydantic 校验模型 + SQLAlchemy ORM
-│   ├── agent/         # LangGraph：state.py, graph.py, nodes/(question, collect, evaluate, report), rules.py
-│   ├── tasks/         # Celery：celery_app.py, parse_task.py, report_task.py
-│   ├── middleware/     # auth.py, rate_limit.py
-│   └── utils/security/ # file_upload.py（四重校验）, prompt_guard.py, masking.py
-└── tests/
+question.py → collect.py → evaluate.py → (条件分支)
+    │                              │
+    │                              ├─ follow_up → 回到 question
+    │                              ├─ next_point → 切换存疑点，回到 question
+    │                              └─ report → report.py 生成报告
 ```
 
-## API 设计要点
+**Tool Calling**：`backend/app/core/tools.py` 定义 3 个工具，面试 Agent 可自主决定调用：
+- `search_knowledge_base` — 从 RAG 知识库检索面试题
+- `lookup_resume_field` — 查看简历具体字段
+- `verify_code_snippet` — 验证代码片段正确性
 
-- 统一响应格式：`{code, message, data, trace_id}`
-- 错误码：0=成功, 1001=参数校验, 1002=会话不存在, 2001=LLM 超时, 2002=LLM 限流, 3001=面试状态异常, 429=限流
-- 面试通过 WebSocket `/ws/interview/{id}` 实时通信，同时保留 REST 降级接口
-- 所有查询强制带 `user_id` 实现数据隔离
+**RAG 知识库**：`backend/knowledge/` 目录下的 JSON 文件，`backend/app/core/rag.py` 提供向量检索 + 关键词降级的混合检索。
 
-## 安全要求
+**追问防死循环**：单点最多 3 轮（`agent/rules.py`），用户可跳过，连续异常 3 次熔断。
 
-- 文件上传：扩展名 + MIME + 魔数 + 大小（10MB），四重校验，随机重命名存储
-- Prompt 注入防护：分隔符隔离用户输入 + 正则过滤 + Pydantic 校验输出
-- 敏感信息脱敏：手机号/邮箱自动脱敏，日志不记录完整内容
-- 限流：Redis 滑动窗口，单会话 Token 配额上限 50000
+### WebSocket 面试通信
 
-## 数据库关键表
+- 前端：`frontend/src/stores/interviewStore.ts` 管理 WS 连接，支持断线自动重连（指数退避，最多 5 次）和消息队列缓存
+- 后端：`backend/app/api/ws.py` 处理 WS 消息，Redis 缓存未消费消息（`backend/app/core/msg_cache.py`），重连时自动补推
+- 消息协议：客户端发 `{type: "answer|skip|rephrase|start", content}`，服务端推 `{type: "question|status|complete|error"}`
 
-- `sessions` — 会话（UUID 主键，软删除）
-- `resume_extracts` — 简历解析结果（JSONB 存结构化数据）
-- `doubt_points` — 存疑点（priority: high/medium/low）
-- `interview_states` — 面试 Checkpoint（断点恢复）
-- `interview_messages` — 面试对话消息
-- `reports` — 评估报告
+### LLM 调用层
 
-## 开发计划
+`backend/app/core/llm.py` 提供统一接口：
+- `call_llm(system, user)` → 文本响应
+- `call_llm_json(system, user)` → JSON 响应（自动解析）
+- `call_llm_with_tools(system, user, tools)` → 支持 Tool Calling（兼容 DeepSeek 的 DSML 文本格式）
+- 所有 LLM 节点都有降级方案：LLM 不可用时切换到规则/模板
 
-5 周迭代：W1 基础搭建 → W2 解析+诊断 → W3 面试 FSM → W4 报告+安全 → W5 部署
+### 敏感信息脱敏
+
+三层脱敏（`backend/app/utils/security/masking.py`）：
+1. LLM prompt 发送前：正则替换手机号/邮箱/身份证
+2. API 响应返回前：mask_phone/mask_email/mask_name
+3. DB 存储前：raw_text 字段脱敏后存储
+
+## 关键配置
+
+`backend/.env` 环境变量：
+
+```
+LLM_BASE_URL=https://api.deepseek.com   # OpenAI 兼容 API 地址
+LLM_API_KEY=sk-xxx                       # API Key（空则用规则降级）
+LLM_MODEL=deepseek-chat                  # 模型名称
+DATABASE_URL=postgresql+asyncpg://...     # PostgreSQL 连接
+REDIS_URL=redis://redis:6379/0           # Redis 连接
+```
+
+`Settings` 类在 `backend/app/core/config.py`，使用 pydantic-settings，`extra="ignore"` 兼容旧字段。
+
+## 前端状态管理
+
+Zustand stores 在 `frontend/src/stores/`：
+- `sessionStore` — 上传/解析轮询
+- `diagnoseStore` — 诊断结果 + 存疑点选择（带轮询）
+- `interviewStore` — WebSocket 面试（连接/重连/消息队列/Tool Calling）
+- `reportStore` — 评估报告
+
+## 注意事项
+
+- `frontend/dist/` 需要提交到 Git（Docker 直接 serve 静态文件）
+- Dockerfile 基础镜像用 `python:3-slim`，阿里云服务器需要配置 Docker 镜像源
+- Git 推送需要开代理（GGDD 端口 9674），或配置 `git config --global http.proxy http://127.0.0.1:9674`
+- DeepSeek 不完全支持 OpenAI 结构化 tool_calls，`llm.py` 有 DSML 文本格式兼容解析
