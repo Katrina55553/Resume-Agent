@@ -12,7 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from pydantic import BaseModel, Field
-from typing import Literal, Optional
+from typing import Literal
 
 from app.core.database import Base
 
@@ -104,7 +104,7 @@ class InterviewStartResponse(BaseModel):
     point_id: str
     round: int = 1
     total_points: int
-    point_list: Optional[list[Dict]] = None
+    point_list: list[Dict | None] = None
 
 
 class InterviewRespondRequest(BaseModel):
@@ -116,12 +116,12 @@ class InterviewRespondResponse(BaseModel):
     """提交回答的响应"""
     session_id: str
     decision: Literal["follow_up", "next_point", "report"]
-    question: Optional[str] = None
-    point_id: Optional[str] = None
-    round: Optional[int] = None
-    point_states: Optional[dict[str, str]] = None
+    question: str | None = None
+    point_id: str | None = None
+    round: int | None = None
+    point_states: dict[str, str | None] = None
     progress: float = 0.0
-    report: Optional[Dict] = None
+    report: Dict | None = None
 
 
 class InterviewResumeResponse(BaseModel):
@@ -132,26 +132,26 @@ class InterviewResumeResponse(BaseModel):
     point_states: dict[str, str]
     messages: list[Dict]
     is_completed: bool
-    report: Optional[Dict] = None
+    report: Dict | None = None
     total_points: int
-    current_question: Optional[str] = None
-    current_point_id: Optional[str] = None
-    point_list: Optional[list[Dict]] = None
+    current_question: str | None = None
+    current_point_id: str | None = None
+    point_list: list[Dict | None] = None
 
 
 class WSIncomingMessage(BaseModel):
     """WebSocket 接收的消息"""
     type: Literal["answer", "skip", "rephrase", "start"]
-    content: Optional[str] = None
+    content: str | None = None
 
 
 class WSOutgoingMessage(BaseModel):
     """WebSocket 发送的消息"""
     type: Literal["question", "status", "complete", "error"]
-    content: Optional[str] = None
-    point_id: Optional[str] = None
-    round: Optional[int] = None
-    point_states: Optional[dict[str, str]] = None
-    progress: Optional[float] = None
-    report: Optional[Dict] = None
-    error: Optional[str] = None
+    content: str | None = None
+    point_id: str | None = None
+    round: int | None = None
+    point_states: dict[str, str | None] = None
+    progress: float | None = None
+    report: Dict | None = None
+    error: str | None = None

@@ -4,14 +4,13 @@
 """
 
 import redis.asyncio as redis
-from typing import Optional
 
 from app.core.config import settings
 
 
 # Redis 连接池
-redis_pool: Optional[redis.ConnectionPool] = None
-redis_client: Optional[redis.Redis] = None
+redis_pool: redis.ConnectionPool | None = None
+redis_client: redis.Redis | None = None
 
 
 async def init_redis() -> None:
@@ -49,7 +48,7 @@ def get_redis() -> redis.Redis:
     return redis_client
 
 
-async def cache_get(key: str) -> Optional[str]:
+async def cache_get(key: str) -> str | None:
     """从缓存获取值"""
     client = get_redis()
     return await client.get(key)

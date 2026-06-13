@@ -8,7 +8,6 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 from app.core.config import settings
 
@@ -22,7 +21,7 @@ _knowledge_entries: list[dict] = []
 _knowledge_loaded = False
 
 # 向量索引缓存
-_embeddings: Optional[list[list[float]]] = None
+_embeddings: list[list[float | None]] = None
 _embedding_entries: list[dict] = []
 
 
@@ -57,7 +56,7 @@ def _load_knowledge_base() -> list[dict]:
     return entries
 
 
-def _get_embedding(text: str) -> Optional[list[float]]:
+def _get_embedding(text: str) -> list[float | None]:
     """获取文本的 embedding 向量"""
     from app.core.llm import _get_client
 

@@ -4,13 +4,14 @@
 所有端点操作数据库，遵循 InterviewRules 约束。
 """
 
+import contextlib
 import json
 import uuid as uuid_lib
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.session import Session, SessionStatus
@@ -85,7 +86,7 @@ def _build_point_state_list(
 async def _load_interview_state(
     db: AsyncSession,
     session_id: str,
-) -> Optional[dict]:
+) -> dict | None:
     """从数据库加载面试状态，还原为 node 函数可用的 state dict。
 
     Returns:
@@ -745,10 +746,8 @@ async def resume_interview(
         )
         state_orm = orm_result.scalar_one_or_none()
         if state_orm and state_orm.report_json:
-            try:
+            with contextlib.suppress(json.JSONDecodeError, TypeError):
                 report = json.loads(state_orm.report_json)
-            except (json.JSONDecodeError, TypeError):
-                pass
 
     doubt_points = state.get("doubt_points", [])
     point_states = state.get("point_states", {})
@@ -794,10 +793,8 @@ async def end_interview(
         state_orm = orm_result.scalar_one_or_none()
         report = {}
         if state_orm and state_orm.report_json:
-            try:
+            with contextlib.suppress(json.JSONDecodeError, TypeError):
                 report = json.loads(state_orm.report_json)
-            except (json.JSONDecodeError, TypeError):
-                pass
         return {
             "code": 0,
             "message": "面试已完成",

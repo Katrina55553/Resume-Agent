@@ -6,7 +6,7 @@
 
 import json
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from app.core.rag import retrieve_context, extract_technical_keywords
 
@@ -99,7 +99,7 @@ def search_knowledge_base(query: str) -> str:
     return result or "未找到相关知识库内容"
 
 
-def lookup_resume_field(field: str, resume_data: Optional[dict] = None) -> str:
+def lookup_resume_field(field: str, resume_data: dict | None = None) -> str:
     """查看简历字段"""
     if not resume_data:
         return "简历数据不可用"
@@ -169,7 +169,7 @@ _TOOL_REGISTRY: dict[str, Callable] = {
 def execute_tool(
     tool_name: str,
     tool_args: dict,
-    resume_data: Optional[dict] = None,
+    resume_data: dict | None = None,
 ) -> str:
     """执行工具调用
 

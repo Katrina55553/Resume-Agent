@@ -5,7 +5,6 @@
 
 from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional
 
 from app.core.config import settings
 
@@ -14,8 +13,8 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> Optional[str]:
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> str | None:
     """获取当前用户
 
     从 JWT Token 或请求头中提取用户身份。
@@ -37,7 +36,7 @@ async def get_current_user(
 
 
 async def require_user(
-    user: Optional[str] = Depends(get_current_user),
+    user: str | None = Depends(get_current_user),
 ) -> str:
     """要求用户登录
 

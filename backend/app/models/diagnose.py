@@ -5,7 +5,7 @@
 """
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Literal, Optional
+from typing import Literal
 from datetime import datetime
 
 

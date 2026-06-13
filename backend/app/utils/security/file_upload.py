@@ -4,7 +4,6 @@
 """
 
 import os
-from typing import Optional
 from fastapi import UploadFile, HTTPException
 
 from app.core.config import settings
@@ -69,7 +68,7 @@ async def validate_upload_file(file: UploadFile) -> dict:
     }
 
 
-def _check_extension(filename: Optional[str]) -> Optional[str]:
+def _check_extension(filename: str | None) -> str | None:
     """检查文件扩展名
 
     Args:
@@ -88,7 +87,7 @@ def _check_extension(filename: Optional[str]) -> Optional[str]:
     return None
 
 
-def _check_mime_type(content_type: Optional[str]) -> Optional[str]:
+def _check_mime_type(content_type: str | None) -> str | None:
     """检查 MIME 类型
 
     Args:
@@ -110,7 +109,7 @@ def _check_mime_type(content_type: Optional[str]) -> Optional[str]:
     return None
 
 
-async def _check_magic_number(file: UploadFile) -> Optional[str]:
+async def _check_magic_number(file: UploadFile) -> str | None:
     """检查文件魔数
 
     Args:
@@ -138,7 +137,7 @@ async def _check_magic_number(file: UploadFile) -> Optional[str]:
     return "文件内容与扩展名不匹配（魔数校验失败）"
 
 
-async def _check_file_size(file: UploadFile) -> Optional[str]:
+async def _check_file_size(file: UploadFile) -> str | None:
     """检查文件大小
 
     Args:

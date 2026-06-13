@@ -8,7 +8,7 @@
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 
 from openai import OpenAI
 
@@ -16,10 +16,10 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_client: Optional[OpenAI] = None
+_client: OpenAI | None = None
 
 
-def _get_client() -> Optional[OpenAI]:
+def _get_client() -> OpenAI | None:
     """懒加载 OpenAI 客户端"""
     global _client
     if _client is None:
@@ -37,7 +37,7 @@ def call_llm(
     user_prompt: str,
     temperature: float = 0.7,
     max_tokens: int = 2048,
-) -> Optional[str]:
+) -> str | None:
     """调用 LLM，返回文本响应。
 
     Returns:
@@ -69,7 +69,7 @@ def call_llm_json(
     user_prompt: str,
     temperature: float = 0.3,
     max_tokens: int = 2048,
-) -> Optional[dict]:
+) -> dict | None:
     """调用 LLM 并解析 JSON 响应。
 
     自动处理 ```json ... ``` 包裹。
@@ -187,7 +187,7 @@ def call_llm_with_tools(
     tools: list[dict],
     temperature: float = 0.7,
     max_tokens: int = 2048,
-) -> tuple[Optional[str], list[dict[str, Any]]]:
+) -> tuple[str | None, list[dict[str, Any]]]:
     """调用 LLM 并支持 Tool Calling。
 
     先尝试结构化 tool_calls（OpenAI 格式），
@@ -255,7 +255,7 @@ def continue_with_tool_results(
     tool_results: list[dict[str, str]],
     temperature: float = 0.7,
     max_tokens: int = 2048,
-) -> Optional[str]:
+) -> str | None:
     """将工具执行结果返回给 LLM，获取最终回复。
 
     Args:
