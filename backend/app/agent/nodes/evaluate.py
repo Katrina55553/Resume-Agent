@@ -11,7 +11,6 @@ from typing import Any
 
 from app.agent.rules import DEFAULT_RULES
 from app.core.llm import (
-    call_llm_routed_json,
     call_llm_with_tools,
     continue_with_tool_results,
     is_llm_available,

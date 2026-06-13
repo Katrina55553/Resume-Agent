@@ -8,7 +8,6 @@ LLM 可自主决定调用知识库检索、查看简历字段、验证代码。
 from typing import Any
 
 from app.core.llm import (
-    call_llm_routed,
     call_llm_with_tools,
     continue_with_tool_results,
     is_llm_available,

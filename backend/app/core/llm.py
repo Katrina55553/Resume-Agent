@@ -8,7 +8,7 @@
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 
 from openai import OpenAI
 
@@ -154,13 +154,11 @@ def classify_task(task_type: str, context: dict = None) -> str:
     base = _TASK_COMPLEXITY.get(task_type, "medium")
 
     # 动态调整（只在 context 明确提供时生效）
-    if task_type == "evaluate" and "answer_length" in ctx:
-        if ctx["answer_length"] < 50:
-            return "medium"  # 回答很短，评估不需要旗舰模型
+    if task_type == "evaluate" and "answer_length" in ctx and ctx["answer_length"] < 50:
+        return "medium"  # 回答很短，评估不需要旗舰模型
 
-    if task_type == "question" and "current_round" in ctx:
-        if ctx["current_round"] >= 3:
-            return "medium"  # 深度追问需要更好理解
+    if task_type == "question" and "current_round" in ctx and ctx["current_round"] >= 3:
+        return "medium"  # 深度追问需要更好理解
 
     return base
 
@@ -172,7 +170,7 @@ def call_llm_routed(
     context: dict = None,
     temperature: float = None,
     max_tokens: int = None,
-) -> Optional[str]:
+) -> str | None:
     """根据任务类型自动选择模型调用 LLM
 
     Args:
@@ -230,7 +228,7 @@ def call_llm_routed_json(
     user_prompt: str,
     context: dict = None,
     **kwargs,
-) -> Optional[dict]:
+) -> dict | None:
     """路由调用 + JSON 解析"""
     text = call_llm_routed(task_type, system_prompt, user_prompt, context, **kwargs)
     if text is None:
