@@ -5,14 +5,14 @@
 
 from typing import Any
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from app.agent.state import AgentState
-from app.agent.nodes.question import generate_question
 from app.agent.nodes.collect import collect_answer
 from app.agent.nodes.evaluate import evaluate_answer
+from app.agent.nodes.question import generate_question
 from app.agent.nodes.report import generate_report
 from app.agent.rules import should_force_switch
+from app.agent.state import AgentState
 
 
 def should_continue(state: dict[str, Any]) -> str:

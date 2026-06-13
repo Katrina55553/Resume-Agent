@@ -4,7 +4,6 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -45,7 +44,7 @@ def should_force_switch(
     total_tokens: int,
     question_count: int,
     rules: InterviewRules = DEFAULT_RULES,
-) -> tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """判断是否需要强制切换话题或结束面试
 
     Args:

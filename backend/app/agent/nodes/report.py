@@ -191,7 +191,7 @@ async def generate_report(state: dict[str, Any]) -> dict[str, Any]:
                 loop.run_in_executor(None, _llm_generate_report, state),
                 timeout=30.0,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("LLM 报告生成超时（30s），降级到规则报告")
             report = None
         except Exception as e:

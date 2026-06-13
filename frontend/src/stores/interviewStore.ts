@@ -79,7 +79,7 @@ function mapPointList(pointList: Record<string, unknown>[] | undefined, fallback
 /** 将 point_states 字典合并到现有数组 */
 function mergePointStates(existing: PointState[], states: Record<string, string> | undefined): PointState[] {
   if (!states) return existing;
-  return existing.map(p => ({ ...p, status: (states[p.id] as any) || p.status }));
+  return existing.map(p => ({ ...p, status: (states[p.id] as string) || p.status }));
 }
 
 let ws: WebSocket | null = null;

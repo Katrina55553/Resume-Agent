@@ -6,16 +6,16 @@ LLM 可用时调用 DeepSeek 进行智能评估，否则使用规则评分。
 """
 
 import json
+import re
 from typing import Any
 
+from app.agent.rules import DEFAULT_RULES
 from app.core.llm import (
-    call_llm_json,
     call_llm_with_tools,
     continue_with_tool_results,
     is_llm_available,
 )
-from app.core.tools import get_tools, execute_tool
-from app.agent.rules import DEFAULT_RULES
+from app.core.tools import execute_tool, get_tools
 
 
 # ---------- 规则评分（降级方案）----------
@@ -159,10 +159,6 @@ def _parse_evaluation(text: str) -> dict:
         return json.loads(text)
     except json.JSONDecodeError:
         return None
-
-
-# 需要导入 re
-import re
 
 
 # ---------- 节点函数 ----------
