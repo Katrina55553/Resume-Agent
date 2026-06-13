@@ -52,16 +52,21 @@ export default function ParsePage() {
   // 加载解析结果
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
+    let cancelled = false;
     api.get(`/sessions/${id}/parse`)
       .then((res) => {
-        setData(res.data.data.parsed_data);
-        setLoading(false);
+        if (!cancelled) {
+          setData(res.data.data.parsed_data);
+          setLoading(false);
+        }
       })
       .catch((err) => {
-        setError(err.response?.data?.detail?.message || '加载解析结果失败');
-        setLoading(false);
+        if (!cancelled) {
+          setError(err.response?.data?.detail?.message || '加载解析结果失败');
+          setLoading(false);
+        }
       });
+    return () => { cancelled = true; };
   }, [id]);
 
   // 确认解析结果，触发诊断
@@ -74,8 +79,9 @@ export default function ParsePage() {
       // 触发诊断
       await api.post(`/sessions/${id}/diagnose`);
       navigate(`/session/${id}/diagnose`);
-    } catch (err: any) {
-      setError(err.response?.data?.detail?.message || '操作失败');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: { message?: string } } } };
+      setError(e.response?.data?.detail?.message || '操作失败');
     } finally {
       setSaving(false);
     }
