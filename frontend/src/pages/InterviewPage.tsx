@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import { useInterviewStore, type ChatMessage } from '../stores/interviewStore';
+import { useVoiceChat } from '../hooks/useVoiceChat';
 
 const PRIORITY_COLORS: Record<string, string> = {
   high: 'bg-red-500',
@@ -30,6 +31,14 @@ export default function InterviewPage() {
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMsgCountRef = useRef(0);
+
+  const voice = useVoiceChat({
+    onResult: (text) => {
+      setInput(text);
+      sendAnswer(text);
+    },
+  });
 
   // 启动面试
   useEffect(() => {
@@ -50,6 +59,17 @@ export default function InterviewPage() {
       return () => clearTimeout(timer);
     }
   }, [isComplete, id, navigate]);
+
+  // 语音模式下自动朗读 AI 新消息
+  useEffect(() => {
+    if (!voice.voiceEnabled) return;
+    if (messages.length <= prevMsgCountRef.current) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg?.role === 'assistant') {
+      voice.speak(lastMsg.content);
+    }
+    prevMsgCountRef.current = messages.length;
+  }, [messages, voice]);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -108,7 +128,20 @@ export default function InterviewPage() {
           ← 返回诊断
         </button>
         <div className="flex items-center gap-3">
-          {/* WebSocket 连接状态 */}
+          {/* 语音开关 */}
+          {voice.isSupported && (
+            <button
+              onClick={voice.toggleVoice}
+              className={`px-3 py-1 text-xs rounded-full border transition ${
+                voice.voiceEnabled
+                  ? 'bg-blue-50 border-blue-300 text-blue-600'
+                  : 'border-gray-300 text-gray-500 hover:border-gray-400'
+              }`}
+              title={voice.voiceEnabled ? '关闭语音模式' : '开启语音模式'}
+            >
+              {voice.voiceEnabled ? '🎙 语音模式' : '🎙 语音'}
+            </button>
+          )}
           <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-400'}`}
             title={wsConnected ? '实时连接中' : '连接断开'} />
           <span className="text-sm text-gray-400">步骤 3/4 · 模拟面试</span>
@@ -151,20 +184,37 @@ export default function InterviewPage() {
                 <textarea
                   className="flex-1 border rounded-xl px-4 py-3 text-sm resize-none outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
                   rows={2}
-                  placeholder="输入你的回答..."
-                  value={input}
+                  placeholder={voice.voiceEnabled ? '点击麦克风说话...' : '输入你的回答...'}
+                  value={voice.voiceEnabled ? (voice.transcript || input) : input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={!wsConnected}
                 />
                 <div className="flex flex-col gap-2">
-                  <button
-                    onClick={handleSend}
-                    disabled={!input.trim() || !wsConnected}
-                    className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 transition"
-                  >
-                    发送
-                  </button>
+                  {voice.voiceEnabled && voice.isSupported ? (
+                    <button
+                      onMouseDown={voice.startListening}
+                      onMouseUp={voice.stopListening}
+                      onTouchStart={voice.startListening}
+                      onTouchEnd={voice.stopListening}
+                      disabled={!wsConnected || voice.isSpeaking}
+                      className={`px-5 py-2 text-white text-sm rounded-lg transition ${
+                        voice.isListening
+                          ? 'bg-red-500 animate-pulse'
+                          : 'bg-blue-600 hover:bg-blue-700 disabled:opacity-40'
+                      }`}
+                    >
+                      {voice.isListening ? '松开发送' : '按住说话'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSend}
+                      disabled={!input.trim() || !wsConnected}
+                      className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 transition"
+                    >
+                      发送
+                    </button>
+                  )}
                   <div className="flex gap-1">
                     <button
                       onClick={handleSkip}
@@ -189,6 +239,15 @@ export default function InterviewPage() {
           {isComplete && (
             <div className="border-t bg-green-50 px-6 py-4 text-center">
               <p className="text-green-700 font-medium">面试完成！正在生成评估报告...</p>
+            </div>
+          )}
+
+          {/* 语音朗读中提示 */}
+          {voice.isSpeaking && (
+            <div className="border-t bg-blue-50 px-6 py-2 flex items-center justify-center gap-2">
+              <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              <span className="text-xs text-blue-600">AI 正在朗读...</span>
+              <button onClick={voice.stopSpeaking} className="text-xs text-blue-500 underline ml-2">停止</button>
             </div>
           )}
         </div>
