@@ -19,8 +19,8 @@ INJECTION_PATTERNS = [
     r"override\s+(?:all\s+)?(?:previous|prior)\s+",
 
     # 系统提示泄露
-    r"(?:show|reveal|display|print)\s+(?:your|the)\s+(?:system|initial)\s+(?:prompt|instructions)",
-    r"what\s+(?:are|is)\s+your\s+(?:system|initial)\s+(?:prompt|instructions)",
+    r"(?:show|reveal|display|print)\s+(?:me\s+)?(?:your|the)\s+(?:system|initial)\s+(?:prompt|instructions)",
+    r"what\s+(?:are|is)\s+(?:your|the)\s+(?:system|initial)\s+(?:prompt|instructions)",
 
     # 编码绕过
     r"base64\s+(?:decode|encode)",

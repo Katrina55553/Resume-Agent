@@ -87,10 +87,12 @@ def _mask_raw_text(text: str) -> str:
         lambda m: m.group(1) + "****" + m.group(2),
         text,
     )
-    # 邮箱：zhangsan@example.com → z***n@example.com
+    # 邮箱：zhangsan@example.com → z**n@example.com
     def _mask_email_match(m):
         local, domain = m.group(1), m.group(2)
-        masked = "*" * len(local) if len(local) <= 2 else local[0] + "***" + local[-1]
+        if len(local) <= 2:
+            return f"{local}@{domain}"
+        masked = local[0] + "**" + local[-1]
         return f"{masked}@{domain}"
     text = re.sub(r"([\w.+-]+)@([\w-]+\.[\w.-]+)", _mask_email_match, text)
     # 身份证号

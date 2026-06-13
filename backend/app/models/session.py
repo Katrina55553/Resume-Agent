@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
 
 
-class SessionStatus(str, enum.StrEnum):
+class SessionStatus(enum.StrEnum):
     """会话状态枚举"""
     UPLOADED = "uploaded"
     PARSING = "parsing"

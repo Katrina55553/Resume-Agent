@@ -36,7 +36,9 @@ def mask_email(email: str) -> str:
     if not email or "@" not in email:
         return "***"
     local, domain = email.split("@", 1)
-    masked_local = "*" * len(local) if len(local) <= 2 else local[0] + "***" + local[-1]
+    if len(local) <= 2:
+        return email
+    masked_local = local[0] + "**" + local[-1]
     return f"{masked_local}@{domain}"
 
 
