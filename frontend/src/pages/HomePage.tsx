@@ -6,17 +6,17 @@ import UploadProgress from '../components/Upload/UploadProgress';
 
 const FEATURES = [
   {
-    icon: '🔍',
+    color: 'from-blue-500 to-blue-600',
     title: 'AI 简历诊断',
     desc: '智能识别简历中的存疑点，标注高/中/低优先级',
   },
   {
-    icon: '🎯',
+    color: 'from-purple-500 to-purple-600',
     title: '模拟面试',
     desc: '基于 LangGraph 状态机的多轮追问，验证简历真实性',
   },
   {
-    icon: '📊',
+    color: 'from-emerald-500 to-emerald-600',
     title: '量化评估',
     desc: '可信度评分 + 逐点反馈 + 改进建议',
   },
@@ -101,7 +101,7 @@ export default function HomePage() {
       <div className="max-w-6xl mx-auto px-6 pt-12 pb-16">
         <div className="text-center mb-12">
           <div className="inline-block mb-4 px-4 py-1.5 rounded-full bg-blue-100 text-blue-700 text-sm font-medium">
-            🚀 AI 驱动 · DeepSeek + LangGraph + RAG
+            AI 驱动 · DeepSeek + LangGraph + RAG
           </div>
           <h1 className="text-5xl font-bold text-gray-900 mb-4 leading-tight">
             AI 简历诊断
@@ -144,12 +144,14 @@ export default function HomePage() {
 
         {/* 功能亮点 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
-          {FEATURES.map((f) => (
+          {FEATURES.map((f, i) => (
             <div
               key={f.title}
               className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
             >
-              <div className="text-3xl mb-3">{f.icon}</div>
+              <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${f.color} flex items-center justify-center mb-3`}>
+                <span className="text-white text-sm font-bold">{i + 1}</span>
+              </div>
               <h3 className="text-lg font-semibold text-gray-800 mb-2">{f.title}</h3>
               <p className="text-sm text-gray-500 leading-relaxed">{f.desc}</p>
             </div>
@@ -162,14 +164,11 @@ export default function HomePage() {
           <p className="text-gray-500">四步完成简历诊断与模拟面试</p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {STEPS.map((s, i) => (
-            <div key={s.step} className="relative text-center">
+          {STEPS.map((s) => (
+            <div key={s.step} className="text-center">
               <div className="text-4xl font-bold text-blue-100 mb-2">{s.step}</div>
               <h4 className="font-semibold text-gray-800 mb-1">{s.title}</h4>
               <p className="text-sm text-gray-500">{s.desc}</p>
-              {i < STEPS.length - 1 && (
-                <div className="hidden md:block absolute top-6 -right-3 w-6 text-gray-200 text-xl">→</div>
-              )}
             </div>
           ))}
         </div>
