@@ -11,6 +11,7 @@ from typing import Any
 
 from app.agent.rules import DEFAULT_RULES
 from app.core.llm import (
+    call_llm_routed_json,
     call_llm_with_tools,
     continue_with_tool_results,
     is_llm_available,
@@ -94,6 +95,7 @@ def _llm_evaluate_answer(
     # 第一次调用：带 tools
     content, tool_calls = call_llm_with_tools(
         _EVALUATE_SYSTEM_PROMPT, user_prompt, get_tools(), temperature=0.3,
+        task_type="evaluate",
     )
 
     # 如果没有工具调用，尝试解析 JSON

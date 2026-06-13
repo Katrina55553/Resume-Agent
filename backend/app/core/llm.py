@@ -8,7 +8,7 @@
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, Optional
 
 from openai import OpenAI
 
@@ -103,6 +103,179 @@ def is_llm_available() -> bool:
     return bool(settings.LLM_API_KEY)
 
 
+# ============================================================
+# 多模型路由
+# ============================================================
+
+# 模型池：不同复杂度用不同模型
+_MODEL_POOL = {
+    "light": {
+        "model": settings.LLM_MODEL_LIGHT,
+        "cost_per_1k": 0.001,    # ¥0.001/千token
+        "max_tokens": 2048,
+    },
+    "medium": {
+        "model": settings.LLM_MODEL_LIGHT,
+        "cost_per_1k": 0.001,
+        "max_tokens": 4096,
+    },
+    "heavy": {
+        "model": settings.LLM_MODEL_HEAVY,
+        "cost_per_1k": 0.004,    # ¥0.004/千token
+        "max_tokens": 4096,
+    },
+}
+
+# 任务类型 → 复杂度映射
+_TASK_COMPLEXITY = {
+    "question": "light",
+    "rephrase": "light",
+    "parse": "medium",
+    "diagnose": "medium",
+    "evaluate": "heavy",
+    "report": "heavy",
+}
+
+# 成本统计
+_cost_log: list[dict] = []
+
+
+def classify_task(task_type: str, context: dict = None) -> str:
+    """根据任务类型和上下文判断复杂度
+
+    Args:
+        task_type: 任务类型 (question/evaluate/report/parse/diagnose)
+        context: 可选上下文，用于动态调整复杂度
+
+    Returns:
+        复杂度等级: "light" | "medium" | "heavy"
+    """
+    ctx = context or {}
+    base = _TASK_COMPLEXITY.get(task_type, "medium")
+
+    # 动态调整（只在 context 明确提供时生效）
+    if task_type == "evaluate" and "answer_length" in ctx:
+        if ctx["answer_length"] < 50:
+            return "medium"  # 回答很短，评估不需要旗舰模型
+
+    if task_type == "question" and "current_round" in ctx:
+        if ctx["current_round"] >= 3:
+            return "medium"  # 深度追问需要更好理解
+
+    return base
+
+
+def call_llm_routed(
+    task_type: str,
+    system_prompt: str,
+    user_prompt: str,
+    context: dict = None,
+    temperature: float = None,
+    max_tokens: int = None,
+) -> Optional[str]:
+    """根据任务类型自动选择模型调用 LLM
+
+    Args:
+        task_type: 任务类型 (question/evaluate/report/parse/diagnose)
+        system_prompt: 系统提示
+        user_prompt: 用户提示
+        context: 可选上下文，用于动态路由
+        temperature: 覆盖默认温度
+        max_tokens: 覆盖默认 max_tokens
+
+    Returns:
+        LLM 响应文本，失败返回 None
+    """
+    level = classify_task(task_type, context)
+    pool = _MODEL_POOL[level]
+
+    client = _get_client()
+    if client is None:
+        return None
+
+    try:
+        response = client.chat.completions.create(
+            model=pool["model"],
+            temperature=temperature if temperature is not None else (0.3 if level == "heavy" else 0.7),
+            max_tokens=max_tokens or pool["max_tokens"],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+
+        text = response.choices[0].message.content.strip()
+
+        # 记录成本
+        usage = response.usage
+        if usage:
+            cost = (usage.prompt_tokens + usage.completion_tokens) / 1000 * pool["cost_per_1k"]
+            _cost_log.append({
+                "task": task_type,
+                "model": pool["model"],
+                "level": level,
+                "tokens": usage.prompt_tokens + usage.completion_tokens,
+                "cost": cost,
+            })
+
+        return text
+    except Exception as e:
+        logger.error(f"LLM 调用失败 [{task_type}/{level}]: {e}")
+        return None
+
+
+def call_llm_routed_json(
+    task_type: str,
+    system_prompt: str,
+    user_prompt: str,
+    context: dict = None,
+    **kwargs,
+) -> Optional[dict]:
+    """路由调用 + JSON 解析"""
+    text = call_llm_routed(task_type, system_prompt, user_prompt, context, **kwargs)
+    if text is None:
+        return None
+    json_match = re.search(r"\{[\s\S]*\}", text)
+    if json_match:
+        try:
+            return json.loads(json_match.group())
+        except json.JSONDecodeError:
+            pass
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        logger.error(f"JSON 解析失败: {text[:200]}")
+        return None
+
+
+def get_cost_summary() -> dict:
+    """获取本次会话的 LLM 调用成本统计"""
+    if not _cost_log:
+        return {"total_cost": 0, "calls": 0, "by_level": {}}
+
+    by_level = {}
+    for entry in _cost_log:
+        level = entry["level"]
+        if level not in by_level:
+            by_level[level] = {"calls": 0, "tokens": 0, "cost": 0}
+        by_level[level]["calls"] += 1
+        by_level[level]["tokens"] += entry["tokens"]
+        by_level[level]["cost"] += entry["cost"]
+
+    total = sum(e["cost"] for e in _cost_log)
+    # 计算全用旗舰模型的成本
+    heavy_cost = _MODEL_POOL["heavy"]["cost_per_1k"]
+    all_heavy = sum(e["tokens"] for e in _cost_log) / 1000 * heavy_cost
+
+    return {
+        "total_cost": round(total, 4),
+        "calls": len(_cost_log),
+        "all_heavy_cost": round(all_heavy, 4),
+        "savings": round((1 - total / all_heavy) * 100, 1) if all_heavy > 0 else 0,
+        "by_level": by_level,
+    }
+
+
 def _parse_tool_calls_from_text(content: str) -> list[dict[str, Any]]:
     """从文本内容中解析工具调用（兼容 DeepSeek 等不支持结构化 tool_calls 的模型）。
 
@@ -187,6 +360,7 @@ def call_llm_with_tools(
     tools: list[dict],
     temperature: float = 0.7,
     max_tokens: int = 2048,
+    task_type: str = "question",
 ) -> tuple[str | None, list[dict[str, Any]]]:
     """调用 LLM 并支持 Tool Calling。
 
@@ -204,9 +378,14 @@ def call_llm_with_tools(
         logger.warning("LLM API key 未配置，跳过 LLM 调用")
         return None, []
 
+    # 根据任务类型选择模型
+    level = classify_task(task_type)
+    pool = _MODEL_POOL[level]
+    model = pool["model"]
+
     try:
         response = client.chat.completions.create(
-            model=settings.LLM_MODEL,
+            model=model,
             temperature=temperature,
             max_tokens=max_tokens,
             messages=[

@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Any
 
-from app.core.llm import call_llm_json, is_llm_available
+from app.core.llm import call_llm_routed_json, is_llm_available
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ def _llm_generate_report(state: dict) -> dict:
 
 请生成面试评估报告："""
 
-    result = call_llm_json(_REPORT_SYSTEM_PROMPT, user_prompt, max_tokens=4096)
+    result = call_llm_routed_json("report", _REPORT_SYSTEM_PROMPT, user_prompt, max_tokens=4096)
     if result and "overall_score" in result:
         return result
     return None

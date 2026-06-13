@@ -15,7 +15,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session as DBSession
 
 from app.core.config import settings
-from app.core.llm import call_llm_json
+from app.core.llm import call_llm_routed_json
 from app.models.session import Session, SessionStatus
 from app.tasks.celery_app import celery_app
 
@@ -108,7 +108,8 @@ def _llm_parse(raw_text: str) -> dict:
     """调用 LLM API 进行结构化解析"""
     masked_text = _mask_raw_text(raw_text[:4000])
 
-    result = call_llm_json(
+    result = call_llm_routed_json(
+        "parse",
         system_prompt="你是简历解析专家。只返回 JSON，不要其他文字。",
         user_prompt=f"""请从以下简历原文中提取结构化信息。
 

@@ -12,7 +12,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session as DBSession
 
 from app.core.config import settings
-from app.core.llm import call_llm_json, is_llm_available
+from app.core.llm import call_llm_routed_json, is_llm_available
 from app.models.session import Session, SessionStatus
 from app.tasks.celery_app import celery_app
 
@@ -79,7 +79,7 @@ def _llm_diagnose(parsed_data: dict) -> dict:
     }
     user_prompt = f"简历结构化数据：\n{json.dumps(resume_summary, ensure_ascii=False, indent=2)}"
 
-    result = call_llm_json(_DIAGNOSE_SYSTEM_PROMPT, user_prompt)
+    result = call_llm_routed_json("diagnose", _DIAGNOSE_SYSTEM_PROMPT, user_prompt)
     if result and "doubt_points" in result:
         # 确保每个存疑点有 id
         for point in result["doubt_points"]:

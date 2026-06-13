@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.deepseek.com"
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "deepseek-chat"
+    LLM_MODEL_LIGHT: str = "deepseek-chat"      # 轻量任务（问题生成、解析）
+    LLM_MODEL_HEAVY: str = "deepseek-reasoner"   # 复杂任务（评估、报告）
+    LLM_MODEL_EMBEDDING: str = "deepseek-embedding"  # 向量模型
 
     # 安全配置
     SECRET_KEY: str = "change-me-in-production"
