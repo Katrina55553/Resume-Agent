@@ -12,8 +12,6 @@ import contextlib
 import json
 import logging
 
-logger = logging.getLogger(__name__)
-
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
@@ -25,6 +23,8 @@ from app.core.database import async_session_maker
 from app.core.msg_cache import get_pending_messages, push_message
 from app.models.interview import InterviewMessageORM, InterviewStateORM
 from app.models.session import Session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
