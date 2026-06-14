@@ -100,9 +100,14 @@ def call_llm_stream(
             stream=True,
         )
 
+        chunk_count = 0
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
+                chunk_count += 1
+                logger.debug(f"[Stream] chunk {chunk_count}: {repr(chunk.choices[0].delta.content[:20])}")
                 yield chunk.choices[0].delta.content
+
+        logger.info(f"[Stream] 完成，共 {chunk_count} 个 chunk")
 
     except Exception as e:
         logger.error(f"LLM 流式调用失败 [{task_type}]: {e}")

@@ -10,6 +10,9 @@
 
 import contextlib
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
@@ -392,15 +395,20 @@ async def _handle_interview_action(
 
         # 逐 chunk 推送到客户端
         question_text = ""
+        chunk_count = 0
         while True:
             chunk = await chunk_queue.get()
             if chunk is None:
                 break
             question_text += chunk
+            chunk_count += 1
+            logger.debug(f"[WS] 发送 chunk {chunk_count}: {repr(chunk[:20])}")
             await _send_json(websocket, {
                 "type": "chunk",
                 "content": chunk,
             })
+
+        logger.info(f"[WS] 流式完成，共发送 {chunk_count} 个 chunk")
 
         # 更新 state
         state["current_question"] = question_text
