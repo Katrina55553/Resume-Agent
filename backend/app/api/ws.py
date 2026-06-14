@@ -358,6 +358,7 @@ async def _handle_interview_action(
             return
 
         # follow_up 或 next_point：流式生成问题
+        import asyncio
         doubt_points = state.get("doubt_points", [])
         point_index = state.get("current_point_index", 0)
         current_point = doubt_points[point_index] if point_index < len(doubt_points) else {}
@@ -370,17 +371,31 @@ async def _handle_interview_action(
             "round": state.get("current_round", 1),
         })
 
-        # 流式生成并逐 chunk 推送
-        question_text = ""
-        import asyncio
+        # 用队列实现跨线程流式推送
+        chunk_queue: asyncio.Queue[str | None] = asyncio.Queue()
         loop = asyncio.get_event_loop()
-        for chunk in await loop.run_in_executor(
-            None,
-            lambda: list(generate_question_stream(
-                current_point, state.get("messages", []),
-                state.get("current_round", 1),
-            )),
-        ):
+
+        def _stream_to_queue():
+            """在后台线程中运行生成器，把 chunk 推入队列"""
+            try:
+                for chunk in generate_question_stream(
+                    current_point, state.get("messages", []),
+                    state.get("current_round", 1),
+                ):
+                    loop.call_soon_threadsafe(chunk_queue.put_nowait, chunk)
+            finally:
+                loop.call_soon_threadsafe(chunk_queue.put_nowait, None)  # 结束信号
+
+        # 启动后台线程
+        import threading
+        threading.Thread(target=_stream_to_queue, daemon=True).start()
+
+        # 逐 chunk 推送到客户端
+        question_text = ""
+        while True:
+            chunk = await chunk_queue.get()
+            if chunk is None:
+                break
             question_text += chunk
             await _send_json(websocket, {
                 "type": "chunk",
