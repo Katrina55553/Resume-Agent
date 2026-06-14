@@ -8,6 +8,7 @@
 import json
 import logging
 import re
+from collections.abc import Iterator
 from typing import Any
 
 from openai import OpenAI
@@ -62,6 +63,50 @@ def call_llm(
     except Exception as e:
         logger.error(f"LLM 调用失败: {e}")
         return None
+
+
+def call_llm_stream(
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float = 0.7,
+    max_tokens: int = 2048,
+    task_type: str = "question",
+) -> Iterator[str]:
+    """流式调用 LLM，逐 chunk yield 文本片段。
+
+    Yields:
+        每个 chunk 的文本内容。最后一个 yield 后，调用结束。
+
+    Usage:
+        for chunk in call_llm_stream(sys, usr):
+            send_to_client(chunk)
+    """
+    client = _get_client()
+    if client is None:
+        return
+
+    level = classify_task(task_type)
+    pool = _MODEL_POOL[level]
+
+    try:
+        stream = client.chat.completions.create(
+            model=pool["model"],
+            temperature=temperature,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            stream=True,
+        )
+
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
+    except Exception as e:
+        logger.error(f"LLM 流式调用失败 [{task_type}]: {e}")
+        return
 
 
 def call_llm_json(

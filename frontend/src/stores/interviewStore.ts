@@ -183,6 +183,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     const connect = () => {
       const socket = new WebSocket(getWsUrl(sessionId));
       ws = socket;
+      let streamingContent = '';
 
       socket.onopen = () => {
         console.log('[WS] 面试连接已建立');
@@ -204,16 +205,54 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
           const { pointStates } = get();
 
           switch (msg.type) {
-            case 'question':
+            case 'question_start':
+              // 流式开始：先插入一条空消息占位
+              streamingContent = '';
               set({
                 messages: [...get().messages, {
                   role: 'assistant',
-                  content: msg.content,
+                  content: '',
                   point_id: msg.point_id,
                 }],
                 currentPointId: msg.point_id || get().currentPointId,
                 currentRound: msg.round || get().currentRound,
               });
+              break;
+
+            case 'chunk':
+              // 流式 chunk：追加到最后一条消息
+              streamingContent += msg.content || '';
+              {
+                const msgs = [...get().messages];
+                if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
+                  msgs[msgs.length - 1] = {
+                    ...msgs[msgs.length - 1],
+                    content: streamingContent,
+                  };
+                }
+                set({ messages: msgs });
+              }
+              break;
+
+            case 'question':
+              // 流式结束或非流式：用完整内容替换最后一条消息
+              {
+                const msgs = [...get().messages];
+                if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
+                  msgs[msgs.length - 1] = {
+                    ...msgs[msgs.length - 1],
+                    content: msg.content,
+                    point_id: msg.point_id,
+                  };
+                } else {
+                  msgs.push({
+                    role: 'assistant',
+                    content: msg.content,
+                    point_id: msg.point_id,
+                  });
+                }
+                set({ messages: msgs });
+              }
               break;
 
             case 'status':

@@ -5,9 +5,11 @@ LLM 可用时调用 DeepSeek（支持 Tool Calling），否则使用模板。
 LLM 可自主决定调用知识库检索、查看简历字段、验证代码。
 """
 
+from collections.abc import Iterator
 from typing import Any
 
 from app.core.llm import (
+    call_llm_stream,
     call_llm_with_tools,
     continue_with_tool_results,
     is_llm_available,
@@ -195,3 +197,43 @@ async def generate_question(state: dict[str, Any]) -> dict[str, Any]:
         "current_question": question_text,
         "messages": [question_msg],
     }
+
+
+def generate_question_stream(
+    doubt_point: dict,
+    messages: list[dict],
+    current_round: int,
+) -> Iterator[str]:
+    """流式生成面试问题，逐 chunk yield 文本片段。
+
+    用于 WebSocket 场景，实现逐字推送。
+    不支持 Tool Calling（流式模式下无法等待工具结果）。
+    """
+    if not is_llm_available():
+        # 降级：模板一次性返回
+        yield _template_question(doubt_point, current_round)
+        return
+
+    recent_messages = messages[-12:] if len(messages) > 12 else messages
+    history_text = "\n".join(
+        f"{'面试官' if m['role'] == 'assistant' else '候选人'}: {m['content']}"
+        for m in recent_messages
+    )
+
+    source_text = doubt_point.get("source_text", "")
+    reason = doubt_point.get("reason", "")
+
+    user_prompt = f"""当前存疑点：
+- 原文引用：{source_text}
+- 存疑原因：{reason}
+- 追问轮次：第 {current_round} 轮
+
+对话历史：
+{history_text if history_text else '（刚开始面试）'}
+
+请生成下一个面试问题（只返回问题文本）："""
+
+    yield from call_llm_stream(
+        _QUESTION_SYSTEM_PROMPT, user_prompt,
+        task_type="question",
+    )

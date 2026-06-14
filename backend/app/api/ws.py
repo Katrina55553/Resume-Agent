@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from app.agent.nodes.collect import collect_answer
 from app.agent.nodes.evaluate import evaluate_answer
-from app.agent.nodes.question import generate_question
+from app.agent.nodes.question import generate_question, generate_question_stream
 from app.agent.nodes.report import generate_report
 from app.core.database import async_session_maker
 from app.core.msg_cache import get_pending_messages, push_message
@@ -357,20 +357,51 @@ async def _handle_interview_action(
             })
             return
 
-        # follow_up 或 next_point：生成问题
-        question_update = await generate_question(state)
-        state.update(question_update)
-        new_msgs = question_update.get("messages", [])
-        state["messages"].extend(new_msgs)
+        # follow_up 或 next_point：流式生成问题
+        doubt_points = state.get("doubt_points", [])
+        point_index = state.get("current_point_index", 0)
+        current_point = doubt_points[point_index] if point_index < len(doubt_points) else {}
+        new_point_id = current_point.get("id", "")
 
-        new_point_id, _ = _get_current_point_info(state)
-        question_text = state.get("current_question", "")
+        # 先发送 question_start 信号
+        await _send_json(websocket, {
+            "type": "question_start",
+            "point_id": new_point_id,
+            "round": state.get("current_round", 1),
+        })
+
+        # 流式生成并逐 chunk 推送
+        question_text = ""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        for chunk in await loop.run_in_executor(
+            None,
+            lambda: list(generate_question_stream(
+                current_point, state.get("messages", []),
+                state.get("current_round", 1),
+            )),
+        ):
+            question_text += chunk
+            await _send_json(websocket, {
+                "type": "chunk",
+                "content": chunk,
+            })
+
+        # 更新 state
+        state["current_question"] = question_text
+        state["messages"].append({
+            "role": "assistant",
+            "content": question_text,
+            "point_id": new_point_id,
+            "round": state.get("current_round", 1),
+        })
 
         await _save_message_to_db(
             session_id, "assistant", question_text, new_point_id,
         )
         await _save_state_checkpoint_to_db(session_id, state)
 
+        # 发送完整问题（用于缓存和最终确认）
         await _send_and_cache(websocket, session_id, {
             "type": "question",
             "content": question_text,
