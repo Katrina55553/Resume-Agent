@@ -1,23 +1,46 @@
 # Resume Agent — MCP Server
 
-将简历智诊 Agent 封装为标准 MCP (Model Context Protocol) 技能包，供 Claude Code / Cursor / 任意 MCP 客户端调用。
+将简历智诊 Agent 封装为标准 MCP (Model Context Protocol) 技能包。
 
-## 可用工具
+**无需后端服务，开箱即用。** 直接调用内部模块，不依赖 FastAPI。
+
+## 可用工具（7 个）
 
 | 工具 | 功能 | 参数 |
 |------|------|------|
-| `diagnose_resume` | 上传简历 → 解析 → 诊断 → 返回存疑点 | `file_path`: 简历文件路径 |
-| `list_sessions` | 列出所有面试会话 | 无 |
-| `get_session_detail` | 获取会话详情（解析结果+诊断报告） | `session_id` |
+| `diagnose_resume` | 上传简历 → AI 解析 → 诊断 → 返回存疑点 | `file_path` |
 | `start_interview` | 开始模拟面试，返回第一个问题 | `session_id`, `selected_point_ids`(可选) |
 | `answer_interview` | 提交回答，返回下一个问题或报告 | `session_id`, `answer` |
 | `skip_question` | 跳过当前存疑点 | `session_id` |
 | `end_interview` | 提前结束面试并生成报告 | `session_id` |
 | `get_report` | 获取评估报告 | `session_id` |
+| `list_sessions` | 列出所有会话 | 无 |
 
-## 配置方式
+## 快速开始
 
-### Claude Code
+### 1. 安装依赖
+
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+### 2. 配置环境变量
+
+```bash
+cp .env.example .env
+# 编辑 .env，填入 LLM_API_KEY 等配置
+```
+
+### 3. 启动 MCP Server
+
+```bash
+python -m app.mcp.server
+```
+
+### 4. 集成到 AI 工具
+
+#### Claude Code
 
 在项目根目录创建 `.claude/settings.json`：
 
@@ -27,102 +50,69 @@
     "resume-agent": {
       "command": "python",
       "args": ["-m", "app.mcp.server"],
-      "cwd": "/path/to/resume-agent/backend",
-      "env": {
-        "LLM_API_KEY": "sk-xxx",
-        "LLM_BASE_URL": "https://api.deepseek.com",
-        "LLM_MODEL": "deepseek-chat",
-        "DATABASE_URL": "postgresql+asyncpg://postgres:postgres@localhost:5432/resume_agent",
-        "REDIS_URL": "redis://localhost:6379/0"
-      }
+      "cwd": "/path/to/resume-agent/backend"
     }
   }
 }
 ```
 
-### Cursor
+#### Cursor
 
-在 `.cursor/mcp.json` 中添加同样的配置。
+在 `.cursor/mcp.json` 中添加同样配置。
 
-### Docker 环境
+#### 其他 MCP 客户端
 
-如果后端运行在 Docker 中，MCP server 需要连接 Docker 内的服务：
-
-```json
-{
-  "mcpServers": {
-    "resume-agent": {
-      "command": "docker",
-      "args": ["exec", "-i", "resume-agent-backend-1", "python", "-m", "app.mcp.server"],
-      "env": {
-        "DATABASE_URL": "postgresql+asyncpg://postgres:postgres@localhost:5432/resume_agent",
-        "REDIS_URL": "redis://localhost:6379/0"
-      }
-    }
-  }
-}
-```
+任何支持 MCP 协议的客户端都可以通过 stdio 方式连接。
 
 ## 使用示例
 
-### 在 Claude Code 中使用
-
 ```
-用户：帮我诊断一下这份简历 /Users/me/resume.pdf
+用户：帮我诊断一下 /Users/me/resume.pdf
 
-Claude：我来调用简历诊断工具。
-  → 调用 diagnose_resume(file_path="/Users/me/resume.pdf")
-  → 返回诊断结果：3 个存疑点（高优 1 个，中优 2 个）
+AI：调用 diagnose_resume(file_path="/Users/me/resume.pdf")
+    → 返回：session_id=xxx, 3 个存疑点（高优 1 个，中优 2 个）
 
 用户：选前两个存疑点开始面试
 
-Claude：好的，开始面试。
-  → 调用 start_interview(session_id="xxx", selected_point_ids=["dp1", "dp2"])
-  → 返回第一个问题："你简历中提到日均处理10万+订单，能详细说说吗？"
+AI：调用 start_interview(session_id="xxx", selected_point_ids=["dp1", "dp2"])
+    → 返回第一个问题
 
-用户：我用了 Redis 缓存热点数据，MySQL 做持久化...
+用户：我用了 Redis 缓存热点数据...
 
-Claude：收到，让我评估你的回答。
-  → 调用 answer_interview(session_id="xxx", answer="...")
-  → 返回下一个问题或面试报告
-```
-
-### 完整面试流程
-
-```
-1. diagnose_resume(file_path="resume.pdf")
-   → 返回 session_id + 存疑点列表
-
-2. start_interview(session_id, selected_point_ids=["dp1"])
-   → 返回第一个问题
-
-3. answer_interview(session_id, "我的回答...")
-   → 返回下一个问题（或 type=complete 含报告）
-
-4. 重复步骤 3 直到所有存疑点处理完
-
-5. get_report(session_id)
-   → 返回完整评估报告
+AI：调用 answer_interview(session_id="xxx", answer="...")
+    → 返回下一个问题或面试报告
 ```
 
 ## 架构
 
 ```
-MCP Client (Claude Code / Cursor)
+MCP Client (Claude Code / Cursor / 任意 MCP 客户端)
     │
     │ MCP Protocol (stdio)
     │
     ▼
-MCP Server (app/mcp/server.py)
+MCP Server (app/mcp/server.py)  ← 独立进程，无需 FastAPI
     │
-    │ HTTP API 调用
+    │ 直接调用内部模块
     │
-    ▼
-FastAPI Backend (app/api/)
-    │
-    ├── Celery 异步任务（解析/诊断）
-    ├── LangGraph Agent（面试状态机）
-    └── PostgreSQL + Redis（持久化）
+    ├── app/tasks/parse_task.py    → 简历解析
+    ├── app/tasks/diagnose_task.py → AI 诊断
+    ├── app/agent/nodes/           → 面试状态机
+    ├── app/core/llm.py            → LLM 调用
+    └── app/core/database.py       → PostgreSQL
 ```
 
-MCP Server 通过 HTTP 调用本地 FastAPI 后端，复用所有已有逻辑，不需要重复实现。
+## 支持的 AI 工具
+
+| 工具 | 集成方式 |
+|------|---------|
+| Claude Code | `.claude/settings.json` |
+| Cursor | `.cursor/mcp.json` |
+| Windsurf | MCP 设置 |
+| Continue | MCP 配置 |
+| Cline | MCP 设置 |
+| Roo Code | MCP 配置 |
+| Aider | MCP 支持 |
+| Zed | MCP 集成 |
+| Sourcegraph Cody | MCP 支持 |
+| GitHub Copilot (Agent) | MCP 支持 |
