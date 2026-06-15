@@ -1,0 +1,251 @@
+# 综合面试题汇总
+
+## 项目概述题
+
+### Q1: 介绍一下这个项目？
+
+**A:** 简历智诊 Agent 是一个 AI 驱动的简历诊断和模拟面试系统。用户上传简历，AI 自动解析结构化数据、识别存疑点，然后进行多轮模拟面试验证简历真实性，最后生成量化评估报告。
+
+技术栈：React + FastAPI + LangGraph + DeepSeek + WebSocket + PostgreSQL + Redis + Elasticsearch + Docker。
+
+### Q2: 项目的架构是怎样的？
+
+**A:**
+```
+前端 (React + TypeScript)
+    │
+    ├── HTTP API ──→ FastAPI ──→ Celery 异步任务（解析/诊断）
+    │                     │
+    │                     ├── LangGraph Agent（面试状态机）
+    │                     ├── LLM 调用层（多模型路由）
+    │                     └── RAG 检索（ES + Embedding + 关键词）
+    │
+    └── WebSocket ──→ 实时面试通信（流式推送 + 断线恢复）
+                          │
+                          └── Redis（消息缓存）
+```
+
+### Q3: 你在这个项目中负责什么？
+
+**A:** 全栈开发，从架构设计到部署上线。核心工作：
+1. 设计 LangGraph 状态机的面试流程和条件分支
+2. 实现 RAG 三级检索策略
+3. 实现 Tool Calling 机制
+4. 封装 MCP Server 技能包
+5. WebSocket 流式通信和断线恢复
+6. 多模型路由策略
+
+---
+
+## LangGraph 相关
+
+### Q4: LangGraph 的 State 是怎么传递的？
+
+**A:** 每个节点函数接收当前 State dict，返回一个更新 dict。LangGraph 自动合并：
+
+```python
+# 节点返回的部分更新
+return {"current_question": "xxx", "messages": [new_msg]}
+
+# LangGraph 自动合并到完整 State
+state["current_question"] = "xxx"
+state["messages"].append(new_msg)
+```
+
+### Q5: 条件分支怎么实现的？
+
+**A:** 用 `add_conditional_edges`：
+
+```python
+def route(state):
+    if state["decision"] == "report":
+        return "report"
+    if state["decision"] == "next_point":
+        return "next_point"
+    return "follow_up"
+
+graph.add_conditional_edges("evaluate", route, {
+    "follow_up": "question",
+    "next_point": "question",
+    "report": "report",
+})
+```
+
+### Q6: 如果 evaluate 节点抛异常了，整个流程会怎样？
+
+**A:** 不会崩溃。evaluate 节点内部有 try-catch，LLM 调用失败时降级到规则评分。即使规则评分也失败，返回默认分数 60，流程继续。
+
+---
+
+## RAG 相关
+
+### Q7: 为什么不直接把所有知识塞进 prompt？
+
+**A:** 三个原因：
+1. **Token 限制**：32 条面试题全塞进去约 5000 tokens，加上对话历史会超限
+2. **相关性**：问 MySQL 的问题不需要 Redis 的知识，塞太多反而干扰 LLM
+3. **成本**：token 越多，API 调用越贵
+
+RAG 只检索最相关的 3 条，精准又省钱。
+
+### Q8: Embedding 向量的维度是多少？为什么选这个维度？
+
+**A:** DeepSeek Embedding 输出 1536 维向量。这不是我们选的，是模型固定的。维度越高，表达能力越强，但计算和存储成本也越高。1536 维是目前主流 Embedding 模型的标准。
+
+### Q9: ES 的分词器用的什么？
+
+**A:** 中文用 IK 分词器（`ik_max_word` 索引时最大切分，`ik_smart` 搜索时智能切分）。比如"MySQL 慢查询优化"会被切分为 `MySQL`、`慢查询`、`优化`、`慢`、`查询`。
+
+### Q10: 三级检索的结果怎么融合？
+
+**A:** 不融合，**串行降级**。先查 Embedding，有结果就用；没有才查 ES；ES 也没有才用关键词。不合并三层结果是因为：
+- 避免结果重复
+- 逻辑简单，容易调试
+- 性能好（命中就停）
+
+---
+
+## Tool Calling 相关
+
+### Q11: Tool Calling 的 JSON Schema 怎么定义的？
+
+**A:** 每个工具有 name、description、parameters：
+
+```python
+{
+    "type": "function",
+    "function": {
+        "name": "search_knowledge_base",
+        "description": "从面试题知识库中检索相关技术资料",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "检索关键词"}
+            },
+            "required": ["query"]
+        }
+    }
+}
+```
+
+LLM 根据 description 判断什么时候调用，根据 parameters 格式化参数。
+
+### Q12: DeepSeek 的 Tool Calling 和 OpenAI 有什么不同？
+
+**A:** OpenAI 返回结构化的 `tool_calls` 字段，DeepSeek 有时会把工具调用输出为文本内容（DSML 格式）。需要两层解析：
+
+```python
+# 优先：结构化 tool_calls
+if message.tool_calls:
+    for tc in message.tool_calls:
+        ...
+
+# 降级：从文本中解析
+else:
+    tool_calls = _parse_tool_calls_from_text(content)
+```
+
+### Q13: 工具调用的参数怎么提取？
+
+**A:** 优先从工具名附近提取 JSON，找不到再用全文第一个 JSON：
+
+```python
+def _extract_json_near_tool(content, func_name):
+    # 先找 func_name 后 200 字符内的 JSON
+    func_pos = content.find(func_name)
+    nearby = content[func_pos:func_pos+200]
+    json_matches = re.findall(r'\{[^{}]+\}', nearby)
+    ...
+```
+
+---
+
+## WebSocket 相关
+
+### Q14: WebSocket 的连接生命周期是怎样的？
+
+**A:**
+```
+1. 前端调 POST /interview/start（创建面试状态）
+2. 前端建立 WebSocket 连接
+3. 发送 {"type": "start"} 获取当前问题
+4. 双向通信：发答案、收问题
+5. 面试结束 → 后端发 {"type": "complete"} → 关闭连接
+```
+
+### Q15: 流式推送为什么用 Queue 而不是直接 yield？
+
+**A:** 因为 LLM 流式生成是**同步迭代器**，不能在异步函数里直接遍历。需要后台线程运行生成器，通过 Queue 把 chunk 传给异步主循环：
+
+```
+后台线程（同步）: for chunk in stream → queue.put
+主事件循环（异步）: await queue.get → websocket.send
+```
+
+### Q16: Redis 消息缓存的 TTL 为什么设 1 小时？
+
+**A:** 平衡内存占用和恢复需求：
+- 太短（5 分钟）：用户断线超过 5 分钟就丢消息
+- 太长（24 小时）：Redis 内存浪费
+- 1 小时：覆盖绝大多数断线场景，过期自动清理
+
+---
+
+## MCP 相关
+
+### Q17: MCP 的 stdio 模式怎么通信？
+
+**A:** MCP 客户端启动 MCP Server 进程，通过 stdin/stdout 交换 JSON-RPC 消息：
+
+```
+客户端 → stdin → MCP Server: {"method": "tools/call", "params": {...}}
+MCP Server → stdout → 客户端: {"result": [...]}
+```
+
+进程退出 = 连接断开。
+
+### Q18: MCP Server 怎么处理并发请求？
+
+**A:** stdio 模式是**单连接、顺序处理**。一个 MCP Server 进程同时只服务一个客户端。如果需要并发，启动多个 MCP Server 进程。
+
+---
+
+## 工程实践题
+
+### Q19: 项目的部署架构是怎样的？
+
+**A:** Docker Compose 编排 6 个服务：
+```
+frontend (Nginx:8000) → 静态文件 + 反向代理
+backend (FastAPI:8000) → API 服务
+celery → 异步任务
+postgres → 结构化数据
+redis → 缓存/消息队列
+elasticsearch → 全文检索
+```
+
+### Q20: 数据库表设计是怎样的？
+
+**A:** 核心 4 张表：
+- `sessions`：会话（UUID 主键，状态机）
+- `interview_states`：面试 checkpoint（存疑点进度、轮次）
+- `interview_messages`：对话消息（role + content）
+- `parsed_content`：解析结果（JSON 字段存在 sessions 表）
+
+### Q21: 怎么保证生产环境的稳定性？
+
+**A:** 多层保障：
+1. **LLM 降级**：每层都有规则/模板兜底
+2. **超时控制**：LLM 调用 30 秒超时，自动降级
+3. **断线恢复**：WebSocket 重连 + Redis 缓存 + DB 持久化
+4. **错误熔断**：连续异常 3 次降级到规则评分
+5. **Docker 健康检查**：postgres/redis/ES 都有 healthcheck
+
+### Q22: 如果让你继续优化这个项目，你会做什么？
+
+**A:**
+1. **多模态简历解析**：支持扫描件/截图，用 Vision LLM 提取文字
+2. **面试回放**：时间线回放，逐轮查看评分变化
+3. **A/B 测试**：不同 prompt 模板的效果对比
+4. **用户系统**：JWT 认证 + 多租户数据隔离
+5. **监控告警**：OpenTelemetry + Prometheus + Grafana
