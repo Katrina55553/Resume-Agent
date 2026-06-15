@@ -1,7 +1,9 @@
 """RAG 知识库检索模块
 
-从 knowledge/ 目录加载面试题知识库，提供向量检索和关键词检索两种模式。
-LLM 可用时用 embedding 向量检索，否则降级到关键词匹配。
+三级检索策略：
+1. Embedding 向量检索（语义相似）
+2. Elasticsearch 全文检索（关键词精确 + 模糊）
+3. 关键词匹配（兜底）
 """
 
 import json
@@ -53,6 +55,16 @@ def _load_knowledge_base() -> list[dict]:
     _knowledge_entries = entries
     _knowledge_loaded = True
     logger.info(f"知识库加载完成，共 {len(entries)} 条")
+
+    # 自动索引到 Elasticsearch
+    try:
+        from app.core.es import index_entries, is_available as es_available
+        if es_available() and entries:
+            indexed = index_entries(entries)
+            logger.info(f"ES 索引完成: {indexed}/{len(entries)} 条")
+    except ImportError:
+        pass
+
     return entries
 
 
@@ -185,7 +197,7 @@ def _keyword_search(query: str, top_k: int = 3) -> list[dict]:
 
 
 def retrieve_context(query: str, top_k: int = 3) -> str:
-    """从知识库检索与查询相关的上下文
+    """三级检索：Embedding 向量 → ES 全文 → 关键词匹配
 
     Args:
         query: 查询文本（通常是存疑点的 source_text + reason）
@@ -196,11 +208,20 @@ def retrieve_context(query: str, top_k: int = 3) -> str:
     """
     results = []
 
-    # 优先用向量检索
+    # 第 1 层：Embedding 向量检索（语义相似）
     if is_llm_available():
         results = _vector_search(query, top_k)
 
-    # 向量检索无结果时降级到关键词
+    # 第 2 层：Elasticsearch 全文检索（关键词精确 + 模糊）
+    if not results:
+        try:
+            from app.core.es import search as es_search, is_available as es_available
+            if es_available():
+                results = es_search(query, top_k)
+        except ImportError:
+            pass
+
+    # 第 3 层：关键词匹配（兜底）
     if not results:
         results = _keyword_search(query, top_k)
 
