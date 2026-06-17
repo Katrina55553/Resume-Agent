@@ -150,7 +150,7 @@ export default function HomePage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {STEPS.map((s) => (
             <div key={s.step} className="text-center">
-              <div className="text-4xl font-bold text-blue-100 mb-2">{s.step}</div>
+              <div className="text-4xl font-bold text-blue-300 mb-2">{s.step}</div>
               <h4 className="font-semibold text-gray-800 mb-1">{s.title}</h4>
               <p className="text-sm text-gray-500">{s.desc}</p>
             </div>

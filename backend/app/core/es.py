@@ -6,7 +6,6 @@
 """
 
 import logging
-from typing import Optional
 
 from elasticsearch import Elasticsearch
 
@@ -14,12 +13,12 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_es_client: Optional[Elasticsearch] = None
+_es_client: Elasticsearch | None = None
 
 INDEX_NAME = "interview_knowledge"
 
 
-def _get_es() -> Optional[Elasticsearch]:
+def _get_es() -> Elasticsearch | None:
     """获取 ES 客户端（懒加载）"""
     global _es_client
     if _es_client is None:

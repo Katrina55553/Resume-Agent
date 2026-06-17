@@ -19,6 +19,7 @@ Claude Code 配置 (.claude/settings.json):
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -31,7 +32,6 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from app.core.config import settings
 from app.core.database import async_session_maker
 from app.models.session import Session, SessionStatus
 
@@ -168,8 +168,9 @@ async def _diagnose_resume(arguments: dict) -> list[TextContent]:
     """上传简历 → 解析 → 诊断（直接调用 Celery task 同步执行）"""
     import shutil
     import uuid as uuid_lib
-    from app.tasks.parse_task import parse_resume
+
     from app.tasks.diagnose_task import diagnose_resume as diagnose_task
+    from app.tasks.parse_task import parse_resume
 
     file_path = arguments["file_path"]
     if not os.path.exists(file_path):
@@ -245,8 +246,9 @@ async def _load_session(session_id: str):
 async def _start_interview(arguments: dict) -> list[TextContent]:
     """开始面试"""
     import uuid as uuid_lib
-    from app.models.interview import InterviewStateORM, InterviewMessageORM
+
     from app.agent.nodes.question import generate_question
+    from app.models.interview import InterviewMessageORM, InterviewStateORM
 
     session_id = arguments["session_id"]
     selected_ids = arguments.get("selected_point_ids", [])
@@ -269,7 +271,8 @@ async def _start_interview(arguments: dict) -> list[TextContent]:
 
     async with async_session_maker() as db:
         # 清除旧面试状态
-        from sqlalchemy import select, delete as sql_delete
+        from sqlalchemy import delete as sql_delete
+        from sqlalchemy import select
         existing = await db.execute(select(InterviewStateORM).where(InterviewStateORM.session_id == session_id))
         old = existing.scalar_one_or_none()
         if old:
@@ -319,7 +322,8 @@ async def _start_interview(arguments: dict) -> list[TextContent]:
 async def _load_interview_state(session_id: str) -> dict | None:
     """加载面试状态"""
     from sqlalchemy import select
-    from app.models.interview import InterviewStateORM, InterviewMessageORM
+
+    from app.models.interview import InterviewMessageORM, InterviewStateORM
 
     async with async_session_maker() as db:
         result = await db.execute(select(InterviewStateORM).where(InterviewStateORM.session_id == session_id))
@@ -380,11 +384,12 @@ def _compute_progress(state: dict) -> float:
 async def _answer_interview(arguments: dict) -> list[TextContent]:
     """提交回答"""
     import uuid as uuid_lib
-    from app.models.interview import InterviewStateORM, InterviewMessageORM
+
     from app.agent.nodes.collect import collect_answer
     from app.agent.nodes.evaluate import evaluate_answer
     from app.agent.nodes.question import generate_question
     from app.agent.nodes.report import generate_report
+    from app.models.interview import InterviewMessageORM
 
     session_id = arguments["session_id"]
     answer = arguments["answer"]
@@ -454,9 +459,10 @@ async def _answer_interview(arguments: dict) -> list[TextContent]:
 
 async def _save_interview_result(session_id: str, state: dict, question_text: str = None, point_id: str = ""):
     """保存面试状态和消息"""
-    import uuid as uuid_lib
-    from app.models.interview import InterviewStateORM, InterviewMessageORM
     import json as json_mod
+    import uuid as uuid_lib
+
+    from app.models.interview import InterviewMessageORM, InterviewStateORM
 
     async with async_session_maker() as db:
         from sqlalchemy import select
@@ -485,8 +491,6 @@ async def _save_interview_result(session_id: str, state: dict, question_text: st
 
 async def _skip_question(arguments: dict) -> list[TextContent]:
     """跳过当前存疑点"""
-    import uuid as uuid_lib
-    from app.models.interview import InterviewMessageORM
     from app.agent.nodes.question import generate_question
     from app.agent.nodes.report import generate_report
 
@@ -534,8 +538,6 @@ async def _skip_question(arguments: dict) -> list[TextContent]:
 
 async def _end_interview(arguments: dict) -> list[TextContent]:
     """提前结束面试"""
-    import json as json_mod
-    from app.models.interview import InterviewStateORM
     from app.agent.nodes.report import _rule_generate_report
 
     session_id = arguments["session_id"]
@@ -575,8 +577,10 @@ async def _end_interview(arguments: dict) -> list[TextContent]:
 async def _get_report(arguments: dict) -> list[TextContent]:
     """获取报告"""
     import json as json_mod
-    from app.models.interview import InterviewStateORM
+
     from sqlalchemy import select
+
+    from app.models.interview import InterviewStateORM
 
     session_id = arguments["session_id"]
 
@@ -589,10 +593,8 @@ async def _get_report(arguments: dict) -> list[TextContent]:
 
     report = {}
     if state_orm.report_json:
-        try:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
             report = json_mod.loads(state_orm.report_json)
-        except (json.JSONDecodeError, TypeError):
-            pass
 
     return _json_text({"session_id": session_id, "status": "completed" if state_orm.is_completed else "in_progress", "report": report})
 

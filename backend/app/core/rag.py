@@ -58,7 +58,8 @@ def _load_knowledge_base() -> list[dict]:
 
     # 自动索引到 Elasticsearch
     try:
-        from app.core.es import index_entries, is_available as es_available
+        from app.core.es import index_entries
+        from app.core.es import is_available as es_available
         if es_available() and entries:
             indexed = index_entries(entries)
             logger.info(f"ES 索引完成: {indexed}/{len(entries)} 条")
@@ -215,7 +216,8 @@ def retrieve_context(query: str, top_k: int = 3) -> str:
     # 第 2 层：Elasticsearch 全文检索（关键词精确 + 模糊）
     if not results:
         try:
-            from app.core.es import search as es_search, is_available as es_available
+            from app.core.es import is_available as es_available
+            from app.core.es import search as es_search
             if es_available():
                 results = es_search(query, top_k)
         except ImportError:
