@@ -47,7 +47,7 @@ def _template_question(doubt_point: dict, current_round: int) -> str:
         return _FOLLOWUP_TEMPLATES[idx]
 
 
-# ---------- LLM 生成（Tool Calling）----------
+# ---------- Prompt 构建 ----------
 
 _QUESTION_SYSTEM_PROMPT = """你是一位经验丰富的技术面试官，正在进行简历真实性验证面试。
 
@@ -69,14 +69,12 @@ _QUESTION_SYSTEM_PROMPT = """你是一位经验丰富的技术面试官，正在
 - 最终只返回问题文本，不要其他内容"""
 
 
-def _llm_generate_question(
+def _build_user_prompt(
     doubt_point: dict,
     messages: list[dict],
     current_round: int,
-    resume_data: dict = None,
 ) -> str:
-    """调用 LLM 生成问题（支持 Tool Calling）"""
-    # 构建对话历史
+    """构建用户 prompt（统一逻辑，避免重复）"""
     recent_messages = messages[-12:] if len(messages) > 12 else messages
     history_text = "\n".join(
         f"{'面试官' if m['role'] == 'assistant' else '候选人'}: {m['content']}"
@@ -86,7 +84,7 @@ def _llm_generate_question(
     source_text = doubt_point.get("source_text", "")
     reason = doubt_point.get("reason", "")
 
-    user_prompt = f"""当前存疑点：
+    return f"""当前存疑点：
 - 原文引用：{source_text}
 - 存疑原因：{reason}
 - 追问轮次：第 {current_round} 轮
@@ -95,6 +93,19 @@ def _llm_generate_question(
 {history_text if history_text else '（刚开始面试）'}
 
 请生成下一个面试问题："""
+
+
+# ---------- LLM 生成（Tool Calling）----------
+
+
+def _llm_generate_question(
+    doubt_point: dict,
+    messages: list[dict],
+    current_round: int,
+    resume_data: dict = None,
+) -> str:
+    """调用 LLM 生成问题（支持 Tool Calling）"""
+    user_prompt = _build_user_prompt(doubt_point, messages, current_round)
 
     # 第一次调用：带 tools
     content, tool_calls = call_llm_with_tools(
@@ -118,7 +129,6 @@ def _llm_generate_question(
         })
 
     # 将工具结果返回给 LLM，获取最终问题
-    # 构建 assistant 消息（包含 tool_calls）
     assistant_msg = {
         "role": "assistant",
         "content": content or "",
@@ -214,24 +224,7 @@ def generate_question_stream(
         yield _template_question(doubt_point, current_round)
         return
 
-    recent_messages = messages[-12:] if len(messages) > 12 else messages
-    history_text = "\n".join(
-        f"{'面试官' if m['role'] == 'assistant' else '候选人'}: {m['content']}"
-        for m in recent_messages
-    )
-
-    source_text = doubt_point.get("source_text", "")
-    reason = doubt_point.get("reason", "")
-
-    user_prompt = f"""当前存疑点：
-- 原文引用：{source_text}
-- 存疑原因：{reason}
-- 追问轮次：第 {current_round} 轮
-
-对话历史：
-{history_text if history_text else '（刚开始面试）'}
-
-请生成下一个面试问题（只返回问题文本）："""
+    user_prompt = _build_user_prompt(doubt_point, messages, current_round)
 
     yield from call_llm_stream(
         _QUESTION_SYSTEM_PROMPT, user_prompt,
