@@ -4,9 +4,10 @@
 支持 .env 文件和系统环境变量。
 """
 
+import re
 
-from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -25,12 +26,12 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.deepseek.com"
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "deepseek-chat"
-    LLM_MODEL_LIGHT: str = "deepseek-chat"      # 轻量任务（问题生成、解析）
-    LLM_MODEL_HEAVY: str = "deepseek-reasoner"   # 复杂任务（评估、报告）
-    LLM_MODEL_EMBEDDING: str = "deepseek-embedding"  # 向量模型
+    LLM_MODEL_LIGHT: str = "deepseek-chat"
+    LLM_MODEL_HEAVY: str = "deepseek-reasoner"
+    LLM_MODEL_EMBEDDING: str = "deepseek-embedding"
 
     # 安全配置
-    SECRET_KEY: str = "change-me-in-production"
+    SECRET_KEY: str = Field(default="change-me-in-production", min_length=16)
 
     # CORS 配置
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
@@ -40,18 +41,25 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
     # 文件上传配置
-    MAX_UPLOAD_SIZE_MB: int = 10
+    MAX_UPLOAD_SIZE_MB: int = Field(default=10, ge=1, le=100)
     ALLOWED_EXTENSIONS: str = "pdf,docx,doc,txt"
 
     # 限流配置
-    RATE_LIMIT_PER_MINUTE: int = 60
-    TOKEN_QUOTA_PER_USER: int = 100000
+    RATE_LIMIT_PER_MINUTE: int = Field(default=60, ge=1, le=1000)
+    TOKEN_QUOTA_PER_USER: int = Field(default=100000, ge=1000)
 
     # 日志级别
-    LOG_LEVEL: str = "INFO"
+    LOG_LEVEL: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 
     # 环境
-    ENVIRONMENT: str = "development"
+    ENVIRONMENT: str = Field(default="development", pattern=r"^(development|staging|production)$")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
     @field_validator("CORS_ORIGINS")
     @classmethod
@@ -65,6 +73,30 @@ class Settings(BaseSettings):
         """将逗号分隔的字符串解析为列表"""
         return [ext.strip().lower() for ext in v.split(",")]
 
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        """验证数据库 URL 格式"""
+        if not re.match(r"^postgresql(\+[a-z]+)?://", v):
+            raise ValueError("DATABASE_URL 必须是 PostgreSQL 连接字符串")
+        return v
+
+    @field_validator("REDIS_URL", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND")
+    @classmethod
+    def validate_redis_url(cls, v: str) -> str:
+        """验证 Redis URL 格式"""
+        if not re.match(r"^redis://", v):
+            raise ValueError("Redis URL 必须以 redis:// 开头")
+        return v
+
+    @field_validator("ELASTICSEARCH_URL", "LLM_BASE_URL")
+    @classmethod
+    def validate_http_url(cls, v: str) -> str:
+        """验证 HTTP URL 格式"""
+        if not re.match(r"^https?://", v):
+            raise ValueError("URL 必须以 http:// 或 https:// 开头")
+        return v
+
     @property
     def max_upload_size_bytes(self) -> int:
         """获取最大上传大小（字节）"""
@@ -74,12 +106,6 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """判断是否为生产环境"""
         return self.ENVIRONMENT == "production"
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-        extra = "ignore"
 
 
 # 全局配置实例
