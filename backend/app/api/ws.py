@@ -20,6 +20,7 @@ from app.agent.nodes.evaluate import evaluate_answer
 from app.agent.nodes.question import generate_question, generate_question_stream
 from app.agent.nodes.report import generate_report
 from app.core.database import async_session_maker
+from app.core.errors import ErrorCode, get_error
 from app.core.msg_cache import get_pending_messages, push_message
 from app.models.interview import InterviewMessageORM, InterviewStateORM
 
@@ -216,14 +217,16 @@ async def _handle_interview_action(
     if not state:
         await _send_and_cache(websocket, session_id, {
             "type": "error",
-            "error": "面试未开始，请先调用 /interview/start",
+            "code": ErrorCode.INTERVIEW_NOT_STARTED.value,
+            "error": get_error(ErrorCode.INTERVIEW_NOT_STARTED).message,
         })
         return
 
     if state.get("is_completed") and action_type != "start":
         await _send_and_cache(websocket, session_id, {
             "type": "error",
-            "error": "面试已结束",
+            "code": ErrorCode.INTERVIEW_ALREADY_COMPLETED.value,
+            "error": get_error(ErrorCode.INTERVIEW_ALREADY_COMPLETED).message,
         })
         return
 
@@ -499,7 +502,8 @@ async def websocket_interview(websocket: WebSocket, session_id: str):
             except json.JSONDecodeError:
                 await _send_and_cache(websocket, session_id, {
                     "type": "error",
-                    "error": "无效的 JSON 格式",
+                    "code": ErrorCode.WS_INVALID_MESSAGE.value,
+                    "error": get_error(ErrorCode.WS_INVALID_MESSAGE).message,
                 })
                 continue
 
@@ -509,6 +513,7 @@ async def websocket_interview(websocket: WebSocket, session_id: str):
             if msg_type not in ("answer", "skip", "rephrase", "start"):
                 await _send_and_cache(websocket, session_id, {
                     "type": "error",
+                    "code": ErrorCode.WS_INVALID_MESSAGE.value,
                     "error": f"未知的消息类型: {msg_type}",
                 })
                 continue
@@ -517,7 +522,8 @@ async def websocket_interview(websocket: WebSocket, session_id: str):
             if msg_type == "answer" and not content:
                 await _send_and_cache(websocket, session_id, {
                     "type": "error",
-                    "error": "回答内容不能为空",
+                    "code": ErrorCode.WS_EMPTY_ANSWER.value,
+                    "error": get_error(ErrorCode.WS_EMPTY_ANSWER).message,
                 })
                 continue
 
