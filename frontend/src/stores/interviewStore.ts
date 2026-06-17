@@ -1,6 +1,41 @@
 import { create } from 'zustand';
 import api from '../utils/api';
 
+// 错误码定义（与后端 app/core/errors.py 保持一致）
+const ERROR_CODES = {
+  // 会话相关
+  SESSION_NOT_FOUND: '1100',
+  INTERVIEW_NOT_STARTED: '1400',
+  INTERVIEW_ALREADY_COMPLETED: '1401',
+  INTERVIEW_NO_POINTS: '1402',
+  // WebSocket 相关
+  WS_INVALID_MESSAGE: '1600',
+  WS_EMPTY_ANSWER: '1601',
+  // LLM 相关
+  LLM_UNAVAILABLE: '1500',
+  LLM_TIMEOUT: '1501',
+} as const;
+
+// 错误码对应的友好提示
+const ERROR_MESSAGES: Record<string, string> = {
+  [ERROR_CODES.SESSION_NOT_FOUND]: '会话不存在，请重新上传简历',
+  [ERROR_CODES.INTERVIEW_NOT_STARTED]: '面试未开始，请先启动面试',
+  [ERROR_CODES.INTERVIEW_ALREADY_COMPLETED]: '面试已结束',
+  [ERROR_CODES.INTERVIEW_NO_POINTS]: '没有存疑点，无法开始面试',
+  [ERROR_CODES.WS_INVALID_MESSAGE]: '消息格式无效',
+  [ERROR_CODES.WS_EMPTY_ANSWER]: '回答内容不能为空',
+  [ERROR_CODES.LLM_UNAVAILABLE]: 'AI 服务暂时不可用，请稍后重试',
+  [ERROR_CODES.LLM_TIMEOUT]: 'AI 响应超时，请稍后重试',
+};
+
+/** 根据错误码获取友好提示 */
+function getErrorMessage(code: string | undefined, fallback: string): string {
+  if (code && ERROR_MESSAGES[code]) {
+    return ERROR_MESSAGES[code];
+  }
+  return fallback;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -270,15 +305,17 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
               socket.close(1000);
               break;
 
-            case 'error':
+            case 'error': {
+              const errorMsg = getErrorMessage(msg.code, msg.error || '未知错误');
               set({
                 messages: [...get().messages, {
                   role: 'assistant',
-                  content: `[系统] ${msg.error}`,
+                  content: `[系统] ${errorMsg}`,
                 }],
-                error: msg.error,
+                error: errorMsg,
               });
               break;
+            }
           }
         } catch {
           console.error('[WS] 消息解析失败:', event.data);
