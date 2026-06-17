@@ -206,52 +206,50 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
 
           switch (msg.type) {
             case 'question_start':
-              // 流式开始：先插入一条空消息占位
+              // 流式开始：清空流式内容，准备接收
               streamingContent = '';
-              set({
-                messages: [...get().messages, {
-                  role: 'assistant',
-                  content: '',
-                  point_id: msg.point_id,
-                }],
-                currentPointId: msg.point_id || get().currentPointId,
-                currentRound: msg.round || get().currentRound,
-              });
               break;
 
             case 'chunk':
-              // 流式 chunk：追加到最后一条消息
+              // 流式 chunk：累积内容
               streamingContent += msg.content || '';
-              {
-                const msgs = [...get().messages];
-                if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
-                  msgs[msgs.length - 1] = {
-                    ...msgs[msgs.length - 1],
-                    content: streamingContent,
-                  };
-                }
-                set({ messages: msgs });
-              }
               break;
 
             case 'question':
-              // 流式结束或非流式：用完整内容替换最后一条消息
+              // 流式结束或非流式：一次性更新消息
               {
                 const msgs = [...get().messages];
-                if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
+                // 检查最后一条是否是 assistant 且内容为空（流式占位）
+                if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant' && msgs[msgs.length - 1].content === '') {
+                  // 替换占位消息
                   msgs[msgs.length - 1] = {
                     ...msgs[msgs.length - 1],
                     content: msg.content,
                     point_id: msg.point_id,
                   };
+                } else if (streamingContent) {
+                  // 有流式内容，替换最后一条
+                  if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
+                    msgs[msgs.length - 1] = {
+                      ...msgs[msgs.length - 1],
+                      content: msg.content,
+                      point_id: msg.point_id,
+                    };
+                  }
                 } else {
+                  // 非流式，追加新消息
                   msgs.push({
                     role: 'assistant',
                     content: msg.content,
                     point_id: msg.point_id,
                   });
                 }
-                set({ messages: msgs });
+                set({
+                  messages: msgs,
+                  currentPointId: msg.point_id || get().currentPointId,
+                  currentRound: msg.round || get().currentRound,
+                });
+                streamingContent = '';  // 重置
               }
               break;
 

@@ -454,23 +454,12 @@ async def _handle_interview_action(
                 await _send_json(websocket, msg)
             return
 
-        # 无缓存消息，发送当前状态
-        if not state.get("is_completed"):
-            question_update = await generate_question(state)
-            question_text = question_update.get("current_question", "")
-            point_id_val, _ = _get_current_point_info(state)
-
-            await _send_and_cache(websocket, session_id, {
-                "type": "question",
-                "content": question_text,
-                "point_id": point_id_val,
-                "round": state.get("current_round", 1),
-            })
-            await _send_and_cache(websocket, session_id, {
-                "type": "status",
-                "point_states": state.get("point_states", {}),
-                "progress": _compute_progress(state),
-            })
+        # 无缓存消息，只发送状态更新（前端已通过 REST API 获取消息）
+        await _send_and_cache(websocket, session_id, {
+            "type": "status",
+            "point_states": state.get("point_states", {}),
+            "progress": _compute_progress(state),
+        })
         return
 
 

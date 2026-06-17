@@ -142,14 +142,18 @@ async def _load_interview_state(
 
     # 从 ORM 恢复评估历史（从消息中提取，简化处理）
     evaluations = []
+    # 构建 point_id -> index 映射
+    point_id_to_index = {dp.get("id", f"point_{i}"): i for i, dp in enumerate(doubt_points)}
     for msg in messages:
         if msg.get("role") == "user":
             # 为每个用户回答生成一个简单的评估记录
-            # 实际评估结果在 evaluate 节点中生成，这里做简化恢复
+            # 根据 point_id 确定存疑点索引
+            point_id = msg.get("point_id", "")
+            point_index = point_id_to_index.get(point_id, 0)
             evaluations.append({
                 "score": 60,  # 恢复时用默认值
                 "feedback": "",
-                "point_index": 0,
+                "point_index": point_index,
             })
 
     return {
