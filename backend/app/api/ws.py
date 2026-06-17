@@ -92,17 +92,24 @@ async def _load_state_from_db(session_id: str) -> dict | None:
             select(Session).where(Session.id == session_id)
         )
         session_obj = session_result.scalar_one_or_none()
-        doubt_points = []
+        all_doubt_points = []
         resume_data = {}
         if session_obj and session_obj.parsed_content:
             try:
                 parsed = json.loads(session_obj.parsed_content)
-                doubt_points = parsed.get("diagnose_result", {}).get(
+                all_doubt_points = parsed.get("diagnose_result", {}).get(
                     "doubt_points", []
                 )
                 resume_data = {k: v for k, v in parsed.items() if k != "diagnose_result"}
             except (json.JSONDecodeError, TypeError):
                 pass
+
+        # 只保留 point_states 中存在的存疑点（用户选中的子集）
+        saved_point_states = state_orm.point_states or {}
+        if saved_point_states:
+            doubt_points = [dp for dp in all_doubt_points if dp.get("id") in saved_point_states]
+        else:
+            doubt_points = all_doubt_points
 
     return {
         "session_id": str(session_id),
