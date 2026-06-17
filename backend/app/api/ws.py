@@ -22,7 +22,6 @@ from app.agent.nodes.report import generate_report
 from app.core.database import async_session_maker
 from app.core.msg_cache import get_pending_messages, push_message
 from app.models.interview import InterviewMessageORM, InterviewStateORM
-from app.models.session import Session
 
 logger = logging.getLogger(__name__)
 
@@ -60,19 +59,22 @@ async def _load_state_from_db(session_id: str) -> dict | None:
 
     WebSocket 处理不在 FastAPI 的依赖注入体系内，
     需要手动管理 DB session。
+    使用 selectinload 一次性加载关联数据，减少数据库往返。
     """
+    from sqlalchemy.orm import selectinload
+
     async with async_session_maker() as db:
-        # 加载 InterviewState
+        # 一次性加载 InterviewState + Session（减少数据库往返）
         result = await db.execute(
-            select(InterviewStateORM).where(
-                InterviewStateORM.session_id == session_id
-            )
+            select(InterviewStateORM)
+            .where(InterviewStateORM.session_id == session_id)
+            .options(selectinload(InterviewStateORM.session))
         )
         state_orm = result.scalar_one_or_none()
         if not state_orm:
             return None
 
-        # 加载消息
+        # 加载消息（单独查询，因为消息数量可能较多）
         msg_result = await db.execute(
             select(InterviewMessageORM)
             .where(InterviewMessageORM.session_id == session_id)
@@ -87,11 +89,8 @@ async def _load_state_from_db(session_id: str) -> dict | None:
             for msg in msg_result.scalars().all()
         ]
 
-        # 加载存疑点和简历数据
-        session_result = await db.execute(
-            select(Session).where(Session.id == session_id)
-        )
-        session_obj = session_result.scalar_one_or_none()
+        # 从关联的 session 获取存疑点和简历数据
+        session_obj = state_orm.session
         all_doubt_points = []
         resume_data = {}
         if session_obj and session_obj.parsed_content:
