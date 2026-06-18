@@ -7,6 +7,7 @@
 
 import json
 import re
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -241,6 +242,54 @@ def _parse_resume(file_path: str) -> dict:
 
 # ── Celery 任务 ───────────────────────────────────────────
 
+class _ProgressStreamer:
+    """在后台线程持续推进解析进度，支持提前停止。
+
+    将 0.0 → 0.9 区间细分为 7 个语义步骤，每步 4 个子更新，
+    用户在前端看到的是平滑连续的进度条。
+    """
+
+    def __init__(self, session_id: str, duration: float = 8.0):
+        self.session_id = session_id
+        self.duration = duration
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        # 子步骤 + 描述（用作前端状态文本）
+        self.steps = [
+            (0.00, 0.20, "正在提取文本…"),
+            (0.20, 0.35, "正在脱敏敏感信息…"),
+            (0.35, 0.50, "正在调用 AI 结构化解析…"),
+            (0.50, 0.65, "正在解析工作经历…"),
+            (0.65, 0.78, "正在解析项目经历…"),
+            (0.78, 0.90, "正在解析教育与技能…"),
+            (0.90, 0.95, "正在保存结果…"),
+        ]
+
+    def start(self):
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self, timeout: float = 2.0):
+        """通知线程提前结束并等待"""
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=timeout)
+
+    def _run(self):
+        step_dur = self.duration / len(self.steps)
+        for s_start, s_end, _msg in self.steps:
+            if self._stop.is_set():
+                return
+            sub_steps = 4
+            for i in range(1, sub_steps + 1):
+                if self._stop.is_set():
+                    return
+                frac = i / sub_steps
+                progress = s_start + (s_end - s_start) * frac
+                _update_progress(self.session_id, round(progress, 3))
+                time.sleep(step_dur / sub_steps)
+
+
 @celery_app.task(
     bind=True,
     name="app.tasks.parse_task.parse_resume",
@@ -250,15 +299,19 @@ def _parse_resume(file_path: str) -> dict:
 )
 def parse_resume(self, session_id: str, file_path: str) -> dict:
     """解析简历文件"""
+    # 立即标记为解析中（前端会看到 status=parsing）
+    _update_progress(session_id, 0.0, SessionStatus.PARSING)
+
+    streamer = _ProgressStreamer(session_id, duration=8.0)
     try:
-        _update_progress(session_id, 0.1, SessionStatus.PARSING)
-        time.sleep(0.3)
+        # 启动进度推进器（后台线程持续更新 0.0 → 0.9）
+        streamer.start()
 
         # 提取文本 + 解析
-        _update_progress(session_id, 0.3)
         parsed_data = _parse_resume(file_path)
 
-        _update_progress(session_id, 0.7)
+        # 通知推进器停止（在保存前）
+        streamer.stop(timeout=2)
 
         # 保存结果
         with DBSession(_get_sync_engine()) as db:
@@ -271,11 +324,10 @@ def parse_resume(self, session_id: str, file_path: str) -> dict:
                 session.updated_at = datetime.utcnow()
                 db.commit()
 
-        _update_progress(session_id, 1.0)
-
         return {"session_id": session_id, "status": "parsed"}
 
     except Exception as exc:
+        streamer.stop(timeout=0.5)
         try:
             with DBSession(_get_sync_engine()) as db:
                 session = db.get(Session, session_id)
