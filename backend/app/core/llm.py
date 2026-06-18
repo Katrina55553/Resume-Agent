@@ -465,9 +465,9 @@ def call_llm_with_tools(
         if not tool_calls and content:
             tool_calls = _parse_tool_calls_from_text(content)
             if tool_calls:
-                # 只去掉 DSML 标签格式，不破坏正常文本
-                content = re.sub(r'<[^>]*>', '', content, flags=re.DOTALL)
-                content = re.sub(r'\n{3,}', '\n\n', content).strip()
+                # 包含 DSML 工具调用标签的文本是 LLM 的内部推理，
+                # 不是最终回复 — 清空 content，最终问题由 continue_with_tool_results 生成
+                content = ""
 
         return content.strip() if content else "", tool_calls
 
