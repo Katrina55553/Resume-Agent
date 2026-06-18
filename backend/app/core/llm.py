@@ -74,6 +74,9 @@ def call_llm_stream(
 ) -> Iterator[str]:
     """流式调用 LLM，逐 chunk yield 文本片段。
 
+    自动过滤 DeepSeek DSML 工具调用标签和标签前的推理文字。
+    检测到 DSML 标签后，丢弃该标签及之后的所有内容。
+
     Yields:
         每个 chunk 的文本内容。最后一个 yield 后，调用结束。
 
@@ -101,13 +104,48 @@ def call_llm_stream(
         )
 
         chunk_count = 0
+        buffer = ""          # 用于检测 DSML 标签的缓冲区
+        dsml_detected = False  # 一旦检测到 DSML，停止输出
+
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
+                raw = chunk.choices[0].delta.content
                 chunk_count += 1
-                logger.debug(f"[Stream] chunk {chunk_count}: {repr(chunk.choices[0].delta.content[:20])}")
-                yield chunk.choices[0].delta.content
+                logger.debug(f"[Stream] chunk {chunk_count}: {repr(raw[:20])}")
 
-        logger.info(f"[Stream] 完成，共 {chunk_count} 个 chunk")
+                if dsml_detected:
+                    # 已检测到 DSML，丢弃后续所有内容
+                    continue
+
+                # 检查缓冲区 + 新内容是否包含 DSML 标签
+                buffer += raw
+
+                # DSML 标签特征：<｜｜DSML｜｜ 或 <｜｜ (DeepSeek 特殊标记)
+                dsml_pattern = re.compile(r'<[｜|]{2,}')
+                if dsml_pattern.search(buffer):
+                    dsml_detected = True
+                    # 输出标签之前的内容（可能有部分有效文本）
+                    match = dsml_pattern.search(buffer)
+                    before = buffer[:match.start()]
+                    if before.strip():
+                        yield before
+                    buffer = ""
+                    logger.info(f"[Stream] 检测到 DSML 标签，停止输出后续内容")
+                    continue
+
+                # 缓冲区太大则输出（保留最后 10 字符用于跨 chunk 检测）
+                if len(buffer) > 20:
+                    # 输出除最后 10 字符外的内容
+                    to_yield = buffer[:-10]
+                    buffer = buffer[-10:]
+                    if to_yield:
+                        yield to_yield
+
+        # 流结束，输出缓冲区剩余内容（如果没有 DSML）
+        if not dsml_detected and buffer:
+            yield buffer
+
+        logger.info(f"[Stream] 完成，共 {chunk_count} 个 chunk, DSML 过滤: {dsml_detected}")
 
     except Exception as e:
         logger.error(f"LLM 流式调用失败 [{task_type}]: {e}")
