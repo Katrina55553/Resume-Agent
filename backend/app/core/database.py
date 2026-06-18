@@ -3,10 +3,14 @@
 使用 SQLAlchemy async engine 和 async session maker。
 """
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # 创建异步引擎
 engine = create_async_engine(
@@ -15,6 +19,8 @@ engine = create_async_engine(
     pool_size=20,
     max_overflow=10,
     pool_pre_ping=True,  # 自动检测断开的连接
+    pool_recycle=300,
+    connect_args={"timeout": 10},
 )
 
 # 创建异步会话工厂
@@ -44,9 +50,25 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db() -> None:
-    """初始化数据库（创建表）"""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """初始化数据库（创建表）
+    带容错处理：数据库不可用时记录警告但不阻断服务启动。
+    """
+    import asyncio
+
+    for attempt in range(5):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("数据库初始化完成")
+            return
+        except Exception as e:
+            wait = (attempt + 1) * 3
+            logger.warning(
+                f"数据库初始化失败 (尝试 {attempt + 1}/5): {e}，{wait}s 后重试"
+            )
+            await asyncio.sleep(wait)
+
+    logger.error("数据库初始化多次失败，服务继续运行但部分功能不可用")
 
 
 async def close_db() -> None:
