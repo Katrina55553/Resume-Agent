@@ -251,7 +251,6 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
               break;
 
             case 'question':
-              // 流式结束或非流式：一次性更新消息
               {
                 const msgs = [...get().messages];
                 // 检查最后一条是否是 assistant 且内容为空（流式占位）
@@ -262,17 +261,15 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
                     content: msg.content,
                     point_id: msg.point_id,
                   };
-                } else if (streamingContent) {
-                  // 有流式内容，替换最后一条
-                  if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
-                    msgs[msgs.length - 1] = {
-                      ...msgs[msgs.length - 1],
-                      content: msg.content,
-                      point_id: msg.point_id,
-                    };
-                  }
+                } else if (streamingContent && msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
+                  // 有流式内容且最后一条是 assistant，替换（避免重复）
+                  msgs[msgs.length - 1] = {
+                    ...msgs[msgs.length - 1],
+                    content: msg.content,
+                    point_id: msg.point_id,
+                  };
                 } else {
-                  // 非流式，追加新消息
+                  // 追加新 assistant 消息（用户回答后最后一条是 user，必须追加）
                   msgs.push({
                     role: 'assistant',
                     content: msg.content,

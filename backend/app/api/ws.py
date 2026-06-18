@@ -419,6 +419,15 @@ async def _handle_interview_action(
 
         logger.info(f"[WS] 流式完成，共发送 {chunk_count} 个 chunk")
 
+        # 流式失败时降级到模板
+        if not question_text.strip():
+            from app.agent.nodes.question import _template_question
+            question_text = _template_question(current_point, state.get("current_round", 1))
+            await _send_json(websocket, {
+                "type": "chunk",
+                "content": question_text,
+            })
+
         # 更新 state
         state["current_question"] = question_text
         state["messages"].append({
