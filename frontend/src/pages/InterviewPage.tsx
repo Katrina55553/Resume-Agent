@@ -25,7 +25,7 @@ export default function InterviewPage() {
   const navigate = useNavigate();
   const {
     messages, pointStates, currentPointId, currentRound,
-    progress, isComplete, status, error, wsConnected,
+    progress, isComplete, status, error, wsConnected, thinking,
     startInterview, sendAnswer, skipQuestion, endInterview, reset,
   } = useInterviewStore();
 
@@ -213,6 +213,22 @@ export default function InterviewPage() {
             {messages.map((msg, i) => (
               <MessageBubble key={i} message={msg} />
             ))}
+            {/* 面试官思考中 */}
+            {thinking && (
+              <div className="flex justify-start animate-fade-in">
+                <div className="max-w-[75%]">
+                  <div className="text-xs text-ink-muted mb-1">面试官</div>
+                  <div className="paper-card rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-2">
+                    <span className="text-sm text-ink-muted">思考中</span>
+                    <span className="flex gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-ink-muted animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-ink-muted animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-ink-muted animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
 
@@ -234,7 +250,7 @@ export default function InterviewPage() {
                   value={voice.voiceEnabled ? (voice.transcript || input) : input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={!wsConnected}
+                  disabled={!wsConnected || thinking}
                 />
                 <div className="flex flex-col gap-2">
                   {voice.voiceEnabled && voice.isSupported ? (
@@ -243,7 +259,7 @@ export default function InterviewPage() {
                       onMouseUp={voice.stopListening}
                       onTouchStart={voice.startListening}
                       onTouchEnd={voice.stopListening}
-                      disabled={!wsConnected || voice.isSpeaking}
+                      disabled={!wsConnected || voice.isSpeaking || thinking}
                       className={`px-5 py-2 text-white text-sm rounded-lg transition ${
                         voice.isListening
                           ? 'bg-priority-high animate-pulse'
@@ -255,7 +271,7 @@ export default function InterviewPage() {
                   ) : (
                     <button
                       onClick={handleSend}
-                      disabled={!input.trim() || !wsConnected}
+                      disabled={!input.trim() || !wsConnected || thinking}
                       className="px-5 py-2 bg-accent text-white text-sm rounded-lg hover:bg-accent-dark disabled:opacity-40 disabled:cursor-not-allowed transition"
                     >
                       发送
@@ -264,14 +280,15 @@ export default function InterviewPage() {
                   <div className="flex gap-1">
                     <button
                       onClick={handleSkip}
-                      disabled={!wsConnected}
+                      disabled={!wsConnected || thinking}
                       className="px-2 py-1 text-xs text-ink-light hover:text-ink border border-border rounded transition disabled:opacity-40"
                     >
                       跳过
                     </button>
                     <button
                       onClick={handleEndInterview}
-                      className="px-2 py-1 text-xs text-priority-high hover:text-priority-high/80 border border-priority-high/30 rounded transition"
+                      disabled={thinking}
+                      className="px-2 py-1 text-xs text-priority-high hover:text-priority-high/80 border border-priority-high/30 rounded transition disabled:opacity-40"
                     >
                       结束面试
                     </button>

@@ -77,6 +77,7 @@ interface InterviewState {
   status: 'idle' | 'loading' | 'active' | 'complete' | 'error';
   error: string | null;
   wsConnected: boolean;
+  thinking: boolean;
   selectedPointIds: string[];
 
   // Actions
@@ -133,6 +134,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   status: 'idle',
   error: null,
   wsConnected: false,
+  thinking: false,
   selectedPointIds: [],
 
   setSelectedPointIds: (ids: string[]) => set({ selectedPointIds: ids }),
@@ -262,8 +264,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
 
           switch (msg.type) {
             case 'question_start':
-              // 流式开始：清空流式内容，准备接收
+              // 流式开始：清空流式内容，退出思考状态
               streamingContent = '';
+              set({ thinking: false });
               break;
 
             case 'chunk':
@@ -301,6 +304,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
                   messages: msgs,
                   currentPointId: msg.point_id || get().currentPointId,
                   currentRound: msg.round || get().currentRound,
+                  thinking: false,
                 });
                 streamingContent = '';  // 重置
               }
@@ -319,6 +323,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
                 status: 'complete',
                 report: msg.report || null,
                 progress: 1,
+                thinking: false,
               });
               socket.close(1000);
               break;
@@ -331,6 +336,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
                   content: `[系统] ${errorMsg}`,
                 }],
                 error: errorMsg,
+                thinking: false,
               });
               break;
             }
@@ -371,8 +377,8 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     const { sessionId, messages } = get();
     if (!sessionId) return;
 
-    // 先在 UI 显示用户消息
-    set({ messages: [...messages, { role: 'user', content }] });
+    // 先在 UI 显示用户消息，并标记"思考中"
+    set({ messages: [...messages, { role: 'user', content }], thinking: true });
 
     const payload = JSON.stringify({ type: 'answer', content });
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -385,6 +391,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   },
 
   skipQuestion: () => {
+    set({ thinking: true });
     const payload = JSON.stringify({ type: 'skip' });
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(payload);
@@ -394,6 +401,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   },
 
   rephraseQuestion: () => {
+    set({ thinking: true });
     const payload = JSON.stringify({ type: 'rephrase' });
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(payload);
@@ -469,6 +477,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       error: null,
       selectedPointIds: [],
       wsConnected: false,
+      thinking: false,
     });
   },
 }));
