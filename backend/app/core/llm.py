@@ -130,7 +130,7 @@ def call_llm_stream(
                     if before.strip():
                         yield before
                     buffer = ""
-                    logger.info(f"[Stream] 检测到 DSML 标签，停止输出后续内容")
+                    logger.info("[Stream] 检测到 DSML 标签，停止输出后续内容")
                     continue
 
                 # 缓冲区太大则输出（保留最后 10 字符用于跨 chunk 检测）
