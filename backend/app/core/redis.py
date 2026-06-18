@@ -3,6 +3,7 @@
 提供 Redis 连接池和便捷方法。
 """
 
+import contextlib
 import logging
 
 import redis.asyncio as redis
@@ -44,10 +45,8 @@ async def init_redis() -> None:
                 f"Redis 初始化失败 (尝试 {attempt + 1}/5): {e}，{wait}s 后重试"
             )
             if redis_pool:
-                try:
+                with contextlib.suppress(Exception):
                     await redis_pool.disconnect()
-                except Exception:
-                    pass
                 redis_pool = None
                 redis_client = None
             await asyncio.sleep(wait)
@@ -89,17 +88,13 @@ async def cache_set(key: str, value: str, expire: int = 3600) -> None:
     """设置缓存值"""
     if redis_client is None:
         return
-    try:
+    with contextlib.suppress(Exception):
         await redis_client.setex(key, expire, value)
-    except Exception:
-        pass
 
 
 async def cache_delete(key: str) -> None:
     """删除缓存"""
     if redis_client is None:
         return
-    try:
+    with contextlib.suppress(Exception):
         await redis_client.delete(key)
-    except Exception:
-        pass
