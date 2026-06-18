@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 
 _client: OpenAI | None = None
 
+_DSML_TOOL_RE = re.compile(r"<\s*/?\s*[｜|]{0,4}\s*DSML\s*[｜|]{0,4}\s*(tool_calls|invoke|call)?", re.IGNORECASE)
+_TOOL_REQUIRED_ARGS = {
+    "search_knowledge_base": {"query"},
+    "lookup_resume_field": {"field"},
+    "verify_code_snippet": {"code", "language"},
+}
+
 
 def _get_client() -> OpenAI | None:
     """懒加载 OpenAI 客户端"""
@@ -387,6 +394,9 @@ def _parse_tool_calls_from_text(content: str) -> list[dict[str, Any]]:
                 seen.add(func_name)
                 # 尝试从内容中提取 JSON 参数
                 args = _extract_json_near_tool(content, func_name)
+                if not _has_required_tool_args(func_name, args):
+                    logger.warning("忽略参数不完整的 DSML 工具调用: %s", func_name)
+                    continue
                 tool_calls.append({
                     "id": f"call_{len(tool_calls)}",
                     "name": func_name,
@@ -404,14 +414,32 @@ def _parse_tool_calls_from_text(content: str) -> list[dict[str, Any]]:
                 args = json.loads(args_str)
             except json.JSONDecodeError:
                 args = {}
+            if not _has_required_tool_args(func_name, args):
+                logger.warning("忽略参数不完整的文本工具调用: %s", func_name)
+                continue
             tool_calls.append({
-                "id": f"call_{i}",
+                "id": f"call_{len(tool_calls)}",
                 "name": func_name,
                 "arguments": args,
             })
         return tool_calls
 
     return tool_calls
+
+
+def _has_required_tool_args(func_name: str, args: dict) -> bool:
+    """检查文本 fallback 解析出的工具参数是否足够执行。"""
+    required = _TOOL_REQUIRED_ARGS.get(func_name, set())
+    return bool(args) and all(str(args.get(key, "")).strip() for key in required)
+
+
+def _strip_dsml_tool_text(content: str) -> str:
+    """移除 DSML 工具调用文本，避免把模型内部工具协议展示给用户。"""
+    if not content:
+        return ""
+    if _DSML_TOOL_RE.search(content):
+        return ""
+    return content
 
 
 def _extract_json_near_tool(content: str, func_name: str) -> dict:
@@ -506,6 +534,8 @@ def call_llm_with_tools(
                 # 包含 DSML 工具调用标签的文本是 LLM 的内部推理，
                 # 不是最终回复 — 清空 content，最终问题由 continue_with_tool_results 生成
                 content = ""
+            else:
+                content = _strip_dsml_tool_text(content)
 
         return content.strip() if content else "", tool_calls
 
