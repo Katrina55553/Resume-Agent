@@ -3,7 +3,14 @@
 from types import SimpleNamespace
 
 from app.core import llm
-from app.core.llm import _parse_tool_calls_from_text, _strip_dsml_tool_text, call_llm_stream
+from app.core.llm import (
+    _parse_tool_calls_from_text,
+    _strip_dsml_tool_text,
+    call_llm,
+    call_llm_routed,
+    call_llm_stream,
+    continue_with_tool_results,
+)
 
 
 def test_malformed_dsml_tool_call_without_arguments_is_ignored():
@@ -101,3 +108,44 @@ def test_stream_yields_plain_question(monkeypatch):
     monkeypatch.setattr(llm, "_get_client", lambda: fake_client)
 
     assert list(call_llm_stream("system", "user")) == chunks
+
+
+def test_plain_llm_call_drops_dsml_text(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: _fake_text_client(
+        "<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke name=\"search_knowledge_base\"></｜｜DSML｜｜tool_calls>",
+    ))
+
+    assert call_llm("system", "user") == ""
+
+
+def test_routed_llm_call_drops_dsml_text(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: _fake_text_client(
+        "我需要调用工具。<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke name=\"search_knowledge_base\">",
+    ))
+
+    assert call_llm_routed("question", "system", "user") == ""
+
+
+def test_continue_with_tool_results_drops_dsml_text(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: _fake_text_client(
+        "<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke name=\"lookup_resume_field\">",
+    ))
+
+    assert continue_with_tool_results("system", [{"role": "user", "content": "user"}], []) == ""
+
+
+def _fake_text_client(content: str):
+    class FakeCompletions:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=content, tool_calls=None),
+                    ),
+                ],
+                usage=None,
+            )
+
+    return SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions()),
+    )

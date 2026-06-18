@@ -66,7 +66,7 @@ def call_llm(
                 {"role": "user", "content": user_prompt},
             ],
         )
-        return response.choices[0].message.content.strip()
+        return _clean_llm_text_response(response.choices[0].message.content)
     except Exception as e:
         logger.error(f"LLM 调用失败: {e}")
         return None
@@ -274,7 +274,7 @@ def call_llm_routed(
             ],
         )
 
-        text = response.choices[0].message.content.strip()
+        text = _clean_llm_text_response(response.choices[0].message.content)
 
         # 记录成本
         usage = response.usage
@@ -408,6 +408,11 @@ def _has_required_tool_args(func_name: str, args: dict) -> bool:
     """检查文本 fallback 解析出的工具参数是否足够执行。"""
     required = _TOOL_REQUIRED_ARGS.get(func_name, set())
     return bool(args) and all(str(args.get(key, "")).strip() for key in required)
+
+
+def _clean_llm_text_response(content: str | None) -> str:
+    """清洗普通 LLM 文本响应，防止 DSML 工具协议泄漏到业务层。"""
+    return _strip_dsml_tool_text(content or "").strip()
 
 
 def _strip_dsml_tool_text(content: str) -> str:
@@ -559,7 +564,7 @@ def continue_with_tool_results(
             messages=full_messages,
         )
 
-        return response.choices[0].message.content.strip()
+        return _clean_llm_text_response(response.choices[0].message.content)
     except Exception as e:
         logger.error(f"LLM Tool 结果处理失败: {e}")
         return None
