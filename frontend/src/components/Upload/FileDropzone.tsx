@@ -85,10 +85,10 @@ export default function FileDropzone({ onFileSelected, disabled }: FileDropzoneP
         onClick={handleClick}
         className={`
           relative cursor-pointer rounded-2xl border-2 border-dashed
-          p-12 text-center transition-all duration-200
+          p-12 text-center transition-all duration-300
           ${isDragging
-            ? 'border-blue-500 bg-blue-50 scale-[1.02]'
-            : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'
+            ? 'border-accent bg-accent-light/40 scale-[1.02]'
+            : 'border-border-strong hover:border-accent hover:bg-paper-dark/50'
           }
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
         `}
@@ -102,16 +102,23 @@ export default function FileDropzone({ onFileSelected, disabled }: FileDropzoneP
         />
 
         <div className="flex flex-col items-center gap-4">
+          <div className={`w-14 h-14 rounded-xl flex items-center justify-center transition-colors ${
+            isDragging ? 'bg-accent text-white' : 'bg-accent-light text-accent'
+          }`}>
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+            </svg>
+          </div>
           <div>
-            <p className="text-lg font-medium text-gray-700">
+            <p className="text-lg font-medium text-ink">
               {isDragging ? '松开即可上传' : '拖拽简历到此处'}
             </p>
-            <p className="text-sm text-gray-500 mt-1">
-              或 <span className="text-blue-500 underline">点击选择文件</span>
+            <p className="text-sm text-ink-light mt-1">
+              或 <span className="text-accent underline">点击选择文件</span>
             </p>
           </div>
 
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-ink-muted">
             支持 PDF / Word / TXT，最大 {MAX_SIZE_MB}MB
           </p>
         </div>
@@ -119,7 +126,7 @@ export default function FileDropzone({ onFileSelected, disabled }: FileDropzoneP
 
       {/* 错误提示 */}
       {error && (
-        <div className="mt-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">
+        <div className="mt-3 rounded-lg bg-priority-high-bg border border-priority-high/20 px-4 py-3 text-sm text-priority-high">
           {error}
         </div>
       )}

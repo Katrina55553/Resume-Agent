@@ -5,16 +5,16 @@ import { useInterviewStore, type ChatMessage } from '../stores/interviewStore';
 import { useVoiceChat } from '../hooks/useVoiceChat';
 
 const PRIORITY_COLORS: Record<string, string> = {
-  high: 'bg-red-500',
-  medium: 'bg-yellow-500',
-  low: 'bg-green-500',
+  high: 'bg-priority-high',
+  medium: 'bg-priority-medium',
+  low: 'bg-priority-low',
 };
 
 const STATUS_LABELS: Record<string, { text: string; color: string }> = {
-  pending: { text: '待追问', color: 'text-gray-400' },
-  active: { text: '追问中', color: 'text-blue-600' },
-  resolved: { text: '已完成', color: 'text-green-600' },
-  skipped: { text: '已跳过', color: 'text-gray-400' },
+  pending: { text: '待追问', color: 'text-ink-muted' },
+  active: { text: '追问中', color: 'text-accent' },
+  resolved: { text: '已完成', color: 'text-priority-low' },
+  skipped: { text: '已跳过', color: 'text-ink-muted' },
 };
 
 /**
@@ -98,10 +98,11 @@ export default function InterviewPage() {
 
   if (status === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">正在准备面试...</p>
+      <div className="flex min-h-screen items-center justify-center bg-paper bg-noise">
+        <div className="text-center animate-fade-up relative z-10">
+          <div className="w-12 h-12 border-[3px] border-accent-light border-t-accent rounded-full animate-spin mx-auto mb-5" />
+          <p className="text-ink font-display text-lg">正在准备面试...</p>
+          <p className="text-ink-muted text-sm mt-1">AI 面试官正在审阅你的简历</p>
         </div>
       </div>
     );
@@ -109,10 +110,19 @@ export default function InterviewPage() {
 
   if (status === 'error') {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-500 mb-4">{error}</p>
-          <button onClick={() => navigate('/')} className="text-blue-500 underline">返回首页</button>
+      <div className="flex min-h-screen items-center justify-center bg-paper bg-noise p-6">
+        <div className="paper-card rounded-2xl p-8 max-w-md text-center animate-scale-in relative z-10">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-priority-high-bg flex items-center justify-center">
+            <span className="text-priority-high text-xl font-display">!</span>
+          </div>
+          <p className="text-ink font-display text-lg mb-2">面试启动失败</p>
+          <p className="text-ink-light text-sm mb-5">{error}</p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-5 py-2 bg-accent text-white text-sm rounded-lg hover:bg-accent-dark transition"
+          >
+            返回首页
+          </button>
         </div>
       </div>
     );
@@ -121,34 +131,52 @@ export default function InterviewPage() {
   const currentPoint = pointStates.find((p) => p.id === currentPointId);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-paper bg-noise">
       {/* 顶部导航 */}
-      <div className="bg-white border-b px-6 py-3 flex items-center justify-between shrink-0">
-        <button onClick={() => navigate(`/session/${id}/diagnose`)} className="text-gray-500 hover:text-gray-700">
-          ← 返回诊断
+      <div className="bg-surface/80 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between shrink-0 relative z-10">
+        <button
+          onClick={() => navigate(`/session/${id}/diagnose`)}
+          className="text-ink-light hover:text-ink text-sm transition flex items-center gap-1"
+        >
+          <span>←</span> 返回诊断
         </button>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           {/* 语音开关 */}
           {voice.isSupported ? (
             <button
               onClick={voice.toggleVoice}
               className={`px-3 py-1 text-xs rounded-full border transition ${
                 voice.voiceEnabled
-                  ? 'bg-blue-50 border-blue-300 text-blue-600'
-                  : 'border-gray-300 text-gray-500 hover:border-gray-400'
+                  ? 'bg-accent-light border-accent text-accent-dark'
+                  : 'border-border text-ink-muted hover:border-border-strong hover:text-ink-light'
               }`}
               title={voice.voiceEnabled ? '关闭语音模式' : '开启语音模式'}
             >
-              {voice.voiceEnabled ? '🎙 语音模式' : '🎙 语音'}
+              🎙 {voice.voiceEnabled ? '语音模式' : '语音'}
             </button>
           ) : (
-            <span className="text-xs text-gray-400" title="语音功能需要通过 HTTPS 访问">
+            <span className="text-xs text-ink-muted" title="语音功能需要通过 HTTPS 访问">
               🎙 语音不可用
             </span>
           )}
-          <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-400'}`}
-            title={wsConnected ? '实时连接中' : '连接断开'} />
-          <span className="text-sm text-gray-400">步骤 3/4 · 模拟面试</span>
+          {/* 连接状态指示器 */}
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              {wsConnected && (
+                <span className="absolute inline-flex h-full w-full rounded-full bg-accent opacity-60 animate-ping" />
+              )}
+              <span
+                className={`relative inline-flex rounded-full h-2 w-2 ${
+                  wsConnected ? 'bg-accent' : 'bg-priority-high'
+                }`}
+              />
+            </span>
+            <span className={`text-xs font-medium ${wsConnected ? 'text-accent' : 'text-priority-high'}`}>
+              {wsConnected ? '已连接' : '已断开'}
+            </span>
+          </div>
+          <div className="h-4 w-px bg-border" />
+          <span className="text-xs text-ink-muted font-display">步骤 3/4 · 模拟面试</span>
         </div>
       </div>
 
@@ -156,13 +184,18 @@ export default function InterviewPage() {
         {/* 左侧：对话区 */}
         <div className="flex-1 flex flex-col">
           {/* 进度条 */}
-          <div className="px-6 pt-4 pb-2 shrink-0">
+          <div className="px-6 pt-4 pb-2 shrink-0 relative z-10">
             <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-500">面试进度</span>
-              <div className="flex-1 bg-gray-200 rounded-full h-1.5">
-                <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${Math.round(progress * 100)}%` }} />
+              <span className="text-xs text-ink-light font-medium">面试进度</span>
+              <div className="flex-1 bg-border rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="h-full bg-accent rounded-full transition-all duration-500"
+                  style={{ width: `${Math.round(progress * 100)}%` }}
+                />
               </div>
-              <span className="text-xs text-gray-500">{Math.round(progress * 100)}%</span>
+              <span className="text-xs text-ink-light font-medium tabular-nums">
+                {Math.round(progress * 100)}%
+              </span>
             </div>
           </div>
 
@@ -176,17 +209,17 @@ export default function InterviewPage() {
 
           {/* 输入区 */}
           {!isComplete && (
-            <div className="border-t bg-white px-6 py-4 shrink-0">
+            <div className="border-t border-border bg-surface px-6 py-4 shrink-0 relative z-10">
               {currentPoint && (
-                <div className="mb-3 flex items-center gap-2 text-xs text-gray-500">
+                <div className="mb-3 flex items-center gap-2 text-xs text-ink-light">
                   <span className={`w-2 h-2 rounded-full ${PRIORITY_COLORS[currentPoint.priority]}`} />
-                  当前存疑点：{currentPoint.source_text.slice(0, 30)}...
-                  <span className="text-gray-400">追问轮次 {currentRound}/3</span>
+                  <span>当前存疑点：{currentPoint.source_text.slice(0, 30)}...</span>
+                  <span className="text-ink-muted">追问轮次 {currentRound}/3</span>
                 </div>
               )}
               <div className="flex gap-3">
                 <textarea
-                  className="flex-1 border rounded-xl px-4 py-3 text-sm resize-none outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                  className="flex-1 border border-border rounded-xl px-4 py-3 text-sm resize-none outline-none transition focus:border-accent focus:ring-2 focus:ring-accent-light bg-paper text-ink placeholder:text-ink-muted"
                   rows={2}
                   placeholder={voice.voiceEnabled ? '点击麦克风说话...' : '输入你的回答...'}
                   value={voice.voiceEnabled ? (voice.transcript || input) : input}
@@ -204,8 +237,8 @@ export default function InterviewPage() {
                       disabled={!wsConnected || voice.isSpeaking}
                       className={`px-5 py-2 text-white text-sm rounded-lg transition ${
                         voice.isListening
-                          ? 'bg-red-500 animate-pulse'
-                          : 'bg-blue-600 hover:bg-blue-700 disabled:opacity-40'
+                          ? 'bg-priority-high animate-pulse'
+                          : 'bg-accent hover:bg-accent-dark disabled:opacity-40'
                       }`}
                     >
                       {voice.isListening ? '松开发送' : '按住说话'}
@@ -214,7 +247,7 @@ export default function InterviewPage() {
                     <button
                       onClick={handleSend}
                       disabled={!input.trim() || !wsConnected}
-                      className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 transition"
+                      className="px-5 py-2 bg-accent text-white text-sm rounded-lg hover:bg-accent-dark disabled:opacity-40 disabled:cursor-not-allowed transition"
                     >
                       发送
                     </button>
@@ -223,13 +256,13 @@ export default function InterviewPage() {
                     <button
                       onClick={handleSkip}
                       disabled={!wsConnected}
-                      className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 border rounded"
+                      className="px-2 py-1 text-xs text-ink-light hover:text-ink border border-border rounded transition disabled:opacity-40"
                     >
                       跳过
                     </button>
                     <button
                       onClick={handleEndInterview}
-                      className="px-2 py-1 text-xs text-red-500 hover:text-red-700 border border-red-300 rounded"
+                      className="px-2 py-1 text-xs text-priority-high hover:text-priority-high/80 border border-priority-high/30 rounded transition"
                     >
                       结束面试
                     </button>
@@ -241,48 +274,53 @@ export default function InterviewPage() {
 
           {/* 面试完成提示 */}
           {isComplete && (
-            <div className="border-t bg-green-50 px-6 py-4 text-center">
-              <p className="text-green-700 font-medium">面试完成！正在生成评估报告...</p>
+            <div className="border-t border-border bg-accent-light px-6 py-4 text-center animate-fade-in relative z-10">
+              <p className="text-accent-dark font-medium font-display">面试完成！正在生成评估报告...</p>
             </div>
           )}
 
           {/* 语音朗读中提示 */}
           {voice.isSpeaking && (
-            <div className="border-t bg-blue-50 px-6 py-2 flex items-center justify-center gap-2">
-              <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-              <span className="text-xs text-blue-600">AI 正在朗读...</span>
-              <button onClick={voice.stopSpeaking} className="text-xs text-blue-500 underline ml-2">停止</button>
+            <div className="border-t border-border bg-accent-light/50 px-6 py-2 flex items-center justify-center gap-2 relative z-10">
+              <span className="w-2 h-2 bg-accent rounded-full animate-pulse" />
+              <span className="text-xs text-accent-dark">AI 正在朗读...</span>
+              <button onClick={voice.stopSpeaking} className="text-xs text-accent underline ml-2">
+                停止
+              </button>
             </div>
           )}
         </div>
 
         {/* 右侧：状态面板 */}
-        <div className="w-72 border-l bg-white p-5 overflow-y-auto shrink-0 hidden lg:block">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">面试状态</h3>
+        <div className="w-72 border-l border-border bg-surface p-5 overflow-y-auto shrink-0 hidden lg:block relative z-10">
+          <h3 className="text-sm font-display font-semibold text-ink mb-1">面试状态</h3>
+          <div className="decor-line mb-4" />
 
           {currentPoint && (
-            <div className="mb-5 p-3 bg-blue-50 rounded-lg border border-blue-100">
+            <div className="mb-5 p-3 bg-accent-light rounded-lg border border-accent/20">
               <div className="flex items-center gap-2 mb-1">
                 <span className={`w-2 h-2 rounded-full ${PRIORITY_COLORS[currentPoint.priority]}`} />
-                <span className="text-xs font-medium text-blue-700">当前存疑点</span>
+                <span className="text-xs font-medium text-accent-dark">当前存疑点</span>
               </div>
-              <p className="text-xs text-gray-600 line-clamp-3">{currentPoint.source_text}</p>
-              <p className="text-xs text-gray-400 mt-1">追问轮次 {currentRound}/3</p>
+              <p className="text-xs text-ink-light line-clamp-3">{currentPoint.source_text}</p>
+              <p className="text-xs text-ink-muted mt-1">追问轮次 {currentRound}/3</p>
             </div>
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {pointStates.map((point) => {
               const label = STATUS_LABELS[point.status] || STATUS_LABELS.pending;
               return (
                 <div
                   key={point.id}
-                  className={`flex items-center gap-2 p-2 rounded text-xs ${
-                    point.id === currentPointId ? 'bg-blue-50' : ''
+                  className={`flex items-center gap-2 p-2 rounded text-xs transition ${
+                    point.id === currentPointId
+                      ? 'bg-accent-light/60 border border-accent/20'
+                      : 'hover:bg-paper-dark'
                   }`}
                 >
                   <span className={`w-2 h-2 rounded-full ${PRIORITY_COLORS[point.priority]}`} />
-                  <span className="flex-1 truncate text-gray-600">{point.source_text.slice(0, 20)}</span>
+                  <span className="flex-1 truncate text-ink-light">{point.source_text.slice(0, 20)}</span>
                   <span className={label.color}>{label.text}</span>
                 </div>
               );
@@ -299,16 +337,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade-up`}>
       <div className={`max-w-[75%] ${isUser ? 'order-2' : 'order-1'}`}>
-        <div className={`text-xs text-gray-400 mb-1 ${isUser ? 'text-right' : ''}`}>
+        <div className={`text-xs text-ink-muted mb-1 ${isUser ? 'text-right' : ''}`}>
           {isUser ? '你' : '面试官'}
         </div>
         <div
           className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
             isUser
-              ? 'bg-blue-600 text-white rounded-br-md whitespace-pre-wrap'
-              : 'bg-white border text-gray-700 rounded-bl-md shadow-sm prose prose-sm max-w-none'
+              ? 'bg-accent text-white rounded-br-md whitespace-pre-wrap shadow-sm'
+              : 'paper-card rounded-bl-md prose prose-sm max-w-none text-ink'
           }`}
         >
           {isUser ? (
