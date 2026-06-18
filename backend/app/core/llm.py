@@ -409,7 +409,7 @@ def _parse_tool_calls_from_text(content: str) -> list[dict[str, Any]]:
     func_pattern = r'(search_knowledge_base|lookup_resume_field|verify_code_snippet)\s*\((\{[^)]*\})\)'
     matches = re.findall(func_pattern, content, re.DOTALL)
     if matches:
-        for i, (func_name, args_str) in enumerate(matches):
+        for func_name, args_str in matches:
             try:
                 args = json.loads(args_str)
             except json.JSONDecodeError:
@@ -530,12 +530,9 @@ def call_llm_with_tools(
         # 降级：从文本内容中解析工具调用（DeepSeek 兼容）
         if not tool_calls and content:
             tool_calls = _parse_tool_calls_from_text(content)
-            if tool_calls:
-                # 包含 DSML 工具调用标签的文本是 LLM 的内部推理，
-                # 不是最终回复 — 清空 content，最终问题由 continue_with_tool_results 生成
-                content = ""
-            else:
-                content = _strip_dsml_tool_text(content)
+            # 包含 DSML 工具调用标签的文本是 LLM 的内部推理，
+            # 不是最终回复 — 清空 content，最终问题由 continue_with_tool_results 生成
+            content = "" if tool_calls else _strip_dsml_tool_text(content)
 
         return content.strip() if content else "", tool_calls
 
