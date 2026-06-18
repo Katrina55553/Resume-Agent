@@ -5,6 +5,8 @@
 
 import pytest
 
+from app.agent.nodes import question as question_node
+from app.agent.nodes.question import generate_question, generate_question_stream
 from app.agent.rules import DEFAULT_RULES, InterviewRules, should_force_switch
 
 
@@ -87,3 +89,50 @@ class TestShouldForceSwitch:
         )
         assert should_switch is False
         assert reason is None
+
+
+class TestGenerateQuestion:
+    """追问生成测试"""
+
+    @pytest.mark.asyncio
+    async def test_generate_question_falls_back_when_llm_returns_process_text(self, monkeypatch):
+        """LLM 只返回过程说明而不是问题时，降级到模板问题。"""
+        doubt_point = {
+            "id": "p1",
+            "source_text": "简历智诊 Agent",
+            "reason": "需要核实项目细节",
+            "probe_questions": ["你在简历智诊 Agent 中具体负责哪个模块？"],
+        }
+        monkeypatch.setattr(question_node, "is_llm_available", lambda: True)
+        monkeypatch.setattr(
+            question_node,
+            "_llm_generate_question",
+            lambda *args, **kwargs: "我先查看一下简历中这个项目的具体细节，以及候选人的工作经历，以便提出有针对性的问题。",
+        )
+
+        result = await generate_question({
+            "doubt_points": [doubt_point],
+            "current_point_index": 0,
+            "current_round": 1,
+            "messages": [],
+            "resume_data": {},
+        })
+
+        assert result["current_question"] == "你在简历智诊 Agent 中具体负责哪个模块？"
+
+    def test_generate_question_stream_falls_back_when_llm_returns_process_text(self, monkeypatch):
+        """流式生成只返回过程说明时，也降级到模板问题。"""
+        doubt_point = {
+            "id": "p1",
+            "source_text": "简历智诊 Agent",
+            "reason": "需要核实项目细节",
+            "probe_questions": ["你在简历智诊 Agent 中具体负责哪个模块？"],
+        }
+        monkeypatch.setattr(question_node, "is_llm_available", lambda: True)
+        monkeypatch.setattr(
+            question_node,
+            "call_llm_stream",
+            lambda *args, **kwargs: iter(["我先查看一下简历中这个项目的具体细节，", "以及候选人的工作经历。"]),
+        )
+
+        assert "".join(generate_question_stream(doubt_point, [], 1)) == "你在简历智诊 Agent 中具体负责哪个模块？"

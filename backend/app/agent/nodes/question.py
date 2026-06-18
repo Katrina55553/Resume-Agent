@@ -30,6 +30,30 @@ _FOLLOWUP_TEMPLATES = [
     "能举一个具体的例子来说明吗？",
 ]
 
+_PROCESS_TEXT_MARKERS = (
+    "我先查看",
+    "我需要查看",
+    "我将查看",
+    "以便提出",
+    "以便生成",
+    "针对这个存疑点进行提问",
+)
+
+_QUESTION_MARKERS = (
+    "？",
+    "?",
+    "能",
+    "能否",
+    "可以",
+    "请",
+    "怎么",
+    "如何",
+    "为什么",
+    "是否",
+    "哪",
+    "什么",
+)
+
 
 def _template_question(doubt_point: dict, current_round: int) -> str:
     """模板生成问题（降级方案）"""
@@ -45,6 +69,27 @@ def _template_question(doubt_point: dict, current_round: int) -> str:
     else:
         idx = (current_round - 1) % len(_FOLLOWUP_TEMPLATES)
         return _FOLLOWUP_TEMPLATES[idx]
+
+
+def _normalize_question_text(text: str | None) -> str | None:
+    """确保 LLM 输出是真正可问给候选人的问题。"""
+    if not text:
+        return None
+
+    question = text.strip().strip('"').strip("'")
+    if not question:
+        return None
+
+    if any(marker in question for marker in _PROCESS_TEXT_MARKERS):
+        return None
+
+    if "？" in question or "?" in question:
+        return question
+
+    if any(question.startswith(marker) for marker in _QUESTION_MARKERS):
+        return question
+
+    return None
 
 
 # ---------- Prompt 构建 ----------
@@ -115,9 +160,7 @@ def _llm_generate_question(
 
     # 如果没有工具调用，直接返回文本
     if not tool_calls:
-        if content:
-            return content.strip().strip('"').strip("'")
-        return None
+        return _normalize_question_text(content)
 
     # 执行工具调用
     tool_results = []
@@ -154,13 +197,12 @@ def _llm_generate_question(
         _QUESTION_SYSTEM_PROMPT, final_prompt_messages, tool_results, temperature=0.7,
     )
 
-    if final_result:
-        return final_result.strip().strip('"').strip("'")
+    final_question = _normalize_question_text(final_result)
+    if final_question:
+        return final_question
 
     # 降级：用第一次的文本回复
-    if content:
-        return content.strip().strip('"').strip("'")
-    return None
+    return _normalize_question_text(content)
 
 
 # ---------- 节点函数 ----------
@@ -193,6 +235,7 @@ async def generate_question(state: dict[str, Any]) -> dict[str, Any]:
             current_point, messages, current_round, resume_data,
         )
 
+    question_text = _normalize_question_text(question_text)
     if question_text is None:
         question_text = _template_question(current_point, current_round)
 
@@ -226,7 +269,13 @@ def generate_question_stream(
 
     user_prompt = _build_user_prompt(doubt_point, messages, current_round)
 
-    yield from call_llm_stream(
+    chunks = list(call_llm_stream(
         _QUESTION_SYSTEM_PROMPT, user_prompt,
         task_type="question",
-    )
+    ))
+    question_text = _normalize_question_text("".join(chunks))
+    if question_text is None:
+        yield _template_question(doubt_point, current_round)
+        return
+
+    yield from chunks
