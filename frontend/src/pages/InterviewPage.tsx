@@ -26,12 +26,13 @@ export default function InterviewPage() {
   const {
     messages, pointStates, currentPointId, currentRound,
     progress, isComplete, status, error, wsConnected,
-    startInterview, sendAnswer, skipQuestion, endInterview,
+    startInterview, sendAnswer, skipQuestion, endInterview, reset,
   } = useInterviewStore();
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
+  const sessionIdRef = useRef<string | null>(null);
 
   const voice = useVoiceChat({
     onResult: (text) => {
@@ -39,6 +40,14 @@ export default function InterviewPage() {
       sendAnswer(text);
     },
   });
+
+  // session_id 变化时重置 store（防止旧面试状态残留）
+  useEffect(() => {
+    if (id && sessionIdRef.current !== id) {
+      sessionIdRef.current = id;
+      reset();
+    }
+  }, [id, reset]);
 
   // 启动面试
   useEffect(() => {

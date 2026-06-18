@@ -52,6 +52,8 @@ export default function DiagnosePage() {
 
   const handleStartInterview = useCallback(() => {
     if (!id) return;
+    // 重置面试 store，清除上次面试的残留状态（isComplete / report / messages）
+    useInterviewStore.getState().reset();
     // 将选中的存疑点 ID 传递给面试模块
     useInterviewStore.getState().setSelectedPointIds(selectedIds);
     navigate(`/session/${id}/interview`);
