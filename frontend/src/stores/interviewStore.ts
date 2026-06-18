@@ -138,7 +138,20 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   setSelectedPointIds: (ids: string[]) => set({ selectedPointIds: ids }),
 
   startInterview: async (sessionId: string) => {
-    set({ status: 'loading', error: null, sessionId });
+    // 清除所有旧状态，避免上一次面试的残留数据闪现
+    set({
+      status: 'loading',
+      error: null,
+      sessionId,
+      messages: [],
+      pointStates: [],
+      currentPointId: null,
+      currentRound: 1,
+      progress: 0,
+      isComplete: false,
+      report: null,
+      wsConnected: false,
+    });
     try {
       // 1. REST 调用创建面试状态，传递选中的存疑点 ID
       const { selectedPointIds } = get();
@@ -171,7 +184,15 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   },
 
   resumeInterview: async (sessionId: string) => {
-    set({ status: 'loading', error: null, sessionId });
+    // 清除旧状态，避免上一次面试的残留数据闪现
+    set({
+      status: 'loading',
+      error: null,
+      sessionId,
+      messages: [],
+      isComplete: false,
+      report: null,
+    });
     try {
       const res = await api.get(`/sessions/${sessionId}/interview/resume`);
       const data = res.data.data || res.data;
