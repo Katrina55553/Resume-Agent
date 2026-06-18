@@ -1,73 +1,39 @@
-# React + TypeScript + Vite
+# 简历智诊 · 前端
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+基于 React 19 + TypeScript + Vite + Tailwind CSS 4 的 SPA 前端。
 
-Currently, two official plugins are available:
+## 快速开始
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev      # 开发服务器 (http://localhost:5173)
+npm run build    # 生产构建（产物在 dist/）
+npm run lint     # ESLint 检查
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 页面路由
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+| 路径 | 页面 | 说明 |
+|------|------|------|
+| `/` | [HomePage.tsx](src/pages/HomePage.tsx) | 首页，上传简历 |
+| `/session/{id}/parse` | [ParsePage.tsx](src/pages/ParsePage.tsx) | 解析确认，内联编辑结构化字段 |
+| `/session/{id}/diagnose` | [DiagnosePage.tsx](src/pages/DiagnosePage.tsx) | 诊断报告，勾选存疑点 |
+| `/session/{id}/interview` | [InterviewPage.tsx](src/pages/InterviewPage.tsx) | 模拟面试，WebSocket 实时对话 |
+| `/session/{id}/report` | [ReportPage.tsx](src/pages/ReportPage.tsx) | 评估报告，量化评分与反馈 |
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## 状态管理（Zustand）
+
+- `sessionStore`：上传与解析进度
+- `diagnoseStore`：诊断报告与存疑点选择
+- `interviewStore`：WebSocket 连接、消息队列、重连逻辑
+- `reportStore`：评估报告数据
+
+## 设计规范
+
+- **设计风格**：Refined Editorial —— 暖纸色背景 + 墨黑排版 + 翡翠绿点缀
+- **字体**：Fraunces（衬线展示体） × Plus Jakarta Sans（正文）
+- **色彩变量**：在 `src/index.css` 中定义，使用时引用 CSS 变量
+- **动效**：错峰入场动画（animate-fade-up）、缩放入场（animate-scale-in）
+- **组件容器**：`glass-card`（毛玻璃）、`paper-card`（纸质）
+
+详见 [../README.md](../README.md) 项目根 README 与 [src/index.css](src/index.css)。
