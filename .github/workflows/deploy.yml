@@ -57,15 +57,7 @@ jobs:
             while [ $WAITED -lt $MAX_WAIT ]; do
               echo "  等待 ${WAITED}s/${MAX_WAIT}s - 服务状态:"
               docker compose ps --format 'table {{.Name}}\t{{.State}}\t{{.Status}}'
-              # 直接尝试访问 backend 的 /health 端点
-              if python3 -c "
-          import urllib.request, sys
-          try:
-              with urllib.request.urlopen('http://localhost:8000/health', timeout=5) as r:
-                  sys.exit(0)
-          except Exception:
-              sys.exit(1)
-          " 2>/dev/null; then
+              if python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)" 2>/dev/null; then
                 echo "  ✓ backend /health 端点响应正常"
                 HEALTH_OK=1
                 break
@@ -79,16 +71,8 @@ jobs:
             echo ">>> 服务状态总览:"
             docker compose ps
 
-            echo ">>> 后端健康检查 (python urllib):"
-            python3 -c "
-          import urllib.request, json
-          try:
-              with urllib.request.urlopen('http://localhost:8000/health', timeout=10) as r:
-                  data = json.loads(r.read())
-                  print(f'  status={data.get(\"status\")}, version={data.get(\"version\")}')
-          except Exception as e:
-              print(f'  WARN: 健康检查失败: {e}')
-          "
+            echo ">>> 后端健康检查:"
+            python3 -c "import urllib.request,json; r=urllib.request.urlopen('http://localhost:8000/health',timeout=10); d=json.loads(r.read()); print('status='+d.get('status','?')+', version='+d.get('version','?'))" 2>/dev/null || echo "  WARN: 健康检查失败"
 
             if [ "$HEALTH_OK" -eq 0 ]; then
               echo ">>> WARNING: 健康检查超时但继续 - 请手动检查服务日志"
