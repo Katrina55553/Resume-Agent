@@ -69,7 +69,7 @@ describe('interviewStore', () => {
   })
 
   describe('reset', () => {
-    it('清除所有状态', () => {
+    it('清除运行态，但保留 selectedPointIds（输入参数）', () => {
       useInterviewStore.setState({
         sessionId: 'old',
         messages: [{ role: 'assistant', content: 'old' }],
@@ -77,7 +77,7 @@ describe('interviewStore', () => {
         report: { overall_score: 80 } as never,
         status: 'complete',
         thinking: true,
-        selectedPointIds: ['old'],
+        selectedPointIds: ['p1', 'p2'],
       })
       useInterviewStore.getState().reset()
       const s = useInterviewStore.getState()
@@ -87,7 +87,10 @@ describe('interviewStore', () => {
       expect(s.report).toBeNull()
       expect(s.status).toBe('idle')
       expect(s.thinking).toBe(false)
-      expect(s.selectedPointIds).toEqual([])
+      // selectedPointIds 是用户在 DiagnosePage 勾选的"输入参数"，
+      // reset 时必须保留，否则 InterviewPage 挂载触发 reset 后，
+      // startInterview 会读到空数组发给后端。
+      expect(s.selectedPointIds).toEqual(['p1', 'p2'])
     })
   })
 

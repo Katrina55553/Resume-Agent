@@ -297,8 +297,15 @@ async def start_interview(
         })
 
     # 过滤：只保留用户选中的存疑点
-    selected_ids = (body or {}).get("selected_point_ids", [])
-    if selected_ids:
+    # 区分"字段缺失（兼容旧前端，用全部）"和"空列表（明确报错）"
+    body_dict = body or {}
+    if "selected_point_ids" in body_dict:
+        selected_ids = body_dict.get("selected_point_ids") or []
+        if not selected_ids:
+            raise HTTPException(status_code=400, detail={
+                "code": 1004,
+                "message": "未选择任何存疑点，请在诊断报告页勾选面试范围",
+            })
         doubt_points = [dp for dp in doubt_points if dp.get("id") in selected_ids]
         if not doubt_points:
             raise HTTPException(status_code=400, detail={

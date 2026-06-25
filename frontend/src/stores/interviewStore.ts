@@ -475,7 +475,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       report: null,
       status: 'idle',
       error: null,
-      selectedPointIds: [],
+      // 保留 selectedPointIds：它是用户在 DiagnosePage 勾选的"输入参数"，
+      // 不是面试运行态。reset 在 InterviewPage 挂载时会被调用，
+      // 若清空会导致 startInterview 读到空数组发给后端。
       wsConnected: false,
       thinking: false,
     });
