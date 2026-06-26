@@ -335,8 +335,23 @@ async def start_interview(
         await db.flush()
         state_orm = None
 
+    # 用户改了存疑点选择 → 旧状态不再适用，清除重建
+    if state_orm and "selected_point_ids" in body_dict:
+        old_ids = set((state_orm.point_states or {}).keys())
+        new_ids = set(dp.get("id") for dp in doubt_points)
+        if old_ids != new_ids:
+            from sqlalchemy import delete as sql_delete
+            await db.execute(
+                sql_delete(InterviewMessageORM).where(
+                    InterviewMessageORM.session_id == session_id
+                )
+            )
+            await db.delete(state_orm)
+            await db.flush()
+            state_orm = None
+
     if state_orm:
-        # 已有状态但未完成，恢复面试
+        # 已有状态但未完成，且选择未变 → 恢复面试
         state = await _load_interview_state(db, session_id)
         return InterviewStartResponse(
             session_id=str(session_id),
