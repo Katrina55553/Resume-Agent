@@ -36,8 +36,12 @@ export default function InterviewPage() {
 
   const voice = useVoiceChat({
     onResult: (text) => {
-      setInput(text);
-      sendAnswer(text);
+      // 语音识别完成后追加到输入框，不直接发送；后续说话继续追加
+      setInput((prev) => {
+        const trimmed = prev.trimEnd();
+        if (!trimmed) return text;
+        return trimmed + ' ' + text;
+      });
     },
   });
 
@@ -246,29 +250,30 @@ export default function InterviewPage() {
                 <textarea
                   className="flex-1 border border-border rounded-xl px-4 py-3 text-sm resize-none outline-none transition focus:border-accent focus:ring-2 focus:ring-accent-light bg-paper text-ink placeholder:text-ink-muted"
                   rows={2}
-                  placeholder={voice.voiceEnabled ? '点击麦克风说话...' : '输入你的回答...'}
-                  value={voice.voiceEnabled ? (voice.transcript || input) : input}
+                  placeholder={voice.voiceEnabled ? '点击麦克风说话，识别后显示在此处，可继续说话追加...' : '输入你的回答...'}
+                  value={voice.voiceEnabled ? (input + voice.transcript) : input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={!wsConnected || thinking}
                 />
                 <div className="flex flex-col gap-2">
-                  {voice.voiceEnabled && voice.isSupported ? (
-                    <button
-                      onMouseDown={voice.startListening}
-                      onMouseUp={voice.stopListening}
-                      onTouchStart={voice.startListening}
-                      onTouchEnd={voice.stopListening}
-                      disabled={!wsConnected || voice.isSpeaking || thinking}
-                      className={`px-5 py-2 text-white text-sm rounded-lg transition ${
-                        voice.isListening
-                          ? 'bg-priority-high animate-pulse'
-                          : 'bg-accent hover:bg-accent-dark disabled:opacity-40'
-                      }`}
-                    >
-                      {voice.isListening ? '松开发送' : '按住说话'}
-                    </button>
-                  ) : (
+                  <div className="flex gap-2">
+                    {voice.voiceEnabled && voice.isSupported && (
+                      <button
+                        onMouseDown={voice.startListening}
+                        onMouseUp={voice.stopListening}
+                        onTouchStart={voice.startListening}
+                        onTouchEnd={voice.stopListening}
+                        disabled={!wsConnected || voice.isSpeaking || thinking}
+                        className={`px-4 py-2 text-white text-sm rounded-lg transition ${
+                          voice.isListening
+                            ? 'bg-priority-high animate-pulse'
+                            : 'bg-accent hover:bg-accent-dark disabled:opacity-40'
+                        }`}
+                      >
+                        {voice.isListening ? '录音中' : '🎤'}
+                      </button>
+                    )}
                     <button
                       onClick={handleSend}
                       disabled={!input.trim() || !wsConnected || thinking}
@@ -276,7 +281,7 @@ export default function InterviewPage() {
                     >
                       发送
                     </button>
-                  )}
+                  </div>
                   <div className="flex gap-1">
                     <button
                       onClick={handleSkip}

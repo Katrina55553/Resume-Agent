@@ -51,9 +51,12 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
           interim += t;
         }
       }
-      setTranscript(final || interim);
-      if (final && onResult) {
-        onResult(final);
+      // final 文本交给调用者通过 onResult 追加到输入框，这里只保留 interim 用于实时显示
+      if (final) {
+        setTranscript('');
+        if (onResult) onResult(final);
+      } else {
+        setTranscript(interim);
       }
     };
 
