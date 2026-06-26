@@ -63,6 +63,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const res = await api.post('/sessions', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,  // 上传大文件单独给 120 秒
       });
 
       const { session_id, status } = res.data.data;
