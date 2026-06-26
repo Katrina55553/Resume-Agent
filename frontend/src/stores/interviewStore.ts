@@ -157,6 +157,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     try {
       // 1. REST 调用创建面试状态，传递选中的存疑点 ID
       const { selectedPointIds } = get();
+      console.log('[startInterview] sending selected_point_ids:', selectedPointIds);
       const res = await api.post(`/sessions/${sessionId}/interview/start`, {
         selected_point_ids: selectedPointIds,
       });

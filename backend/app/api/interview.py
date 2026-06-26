@@ -6,6 +6,7 @@
 
 import contextlib
 import json
+import logging
 import uuid as uuid_lib
 from datetime import datetime
 from typing import Any
@@ -28,6 +29,8 @@ from app.models.interview import (
     InterviewStateORM,
 )
 from app.models.session import Session, SessionStatus
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -299,6 +302,11 @@ async def start_interview(
     # 过滤：只保留用户选中的存疑点
     # 区分"字段缺失（兼容旧前端，用全部）"和"空列表（明确报错）"
     body_dict = body or {}
+    all_dp_ids = [dp.get("id") for dp in doubt_points]
+    logger.info(
+        "[StartInterview] body=%s all_dp_ids=%s",
+        body_dict, all_dp_ids,
+    )
     if "selected_point_ids" in body_dict:
         selected_ids = body_dict.get("selected_point_ids") or []
         if not selected_ids:
@@ -312,6 +320,10 @@ async def start_interview(
                 "code": 1004,
                 "message": "选中的存疑点无效",
             })
+        logger.info(
+            "[StartInterview] filtered: %d/%d doubt_points remain, selected_ids=%s",
+            len(doubt_points), len(all_dp_ids), selected_ids,
+        )
 
     # 4. 检查是否已有面试状态（幂等）
     existing = await db.execute(
