@@ -40,20 +40,24 @@ LLM 生成: "你简历中提到使用 MySQL，能详细说说吗？"
 
 ```
 客户端 → 服务端:
-  {"type": "answer", "content": "我的回答..."}
-  {"type": "skip"}
-  {"type": "start"}
+  {"type": "answer", "content": "我的回答..."}    ← 提交回答
+  {"type": "skip"}                                ← 跳过当前存疑点
+  {"type": "rephrase"}                            ← 换个问法（重新生成问题）
+  {"type": "start"}                               ← 开始/恢复面试（重连时触发补推）
 
 服务端 → 客户端:
-  {"type": "question_start", "point_id": "...", "round": 1}  ← 开始生成
+  {"type": "question_start", "point_id": "...", "round": 1}  ← 开始流式生成
   {"type": "chunk", "content": "你"}                          ← 逐字推送
   {"type": "chunk", "content": "简历"}
   {"type": "chunk", "content": "中"}
   ...
-  {"type": "question", "content": "完整问题", "point_id": "..."}  ← 确认
-  {"type": "status", "point_states": {...}, "progress": 0.5}     ← 状态
-  {"type": "complete", "report": {...}}                          ← 面试结束
+  {"type": "question", "content": "完整问题", "point_id": "...", "round": N}  ← 最终确认
+  {"type": "status", "point_states": {...}, "progress": 0.5}     ← 进度状态
+  {"type": "complete", "report": {...}}                          ← 面试结束 + 报告
+  {"type": "error", "code": "...", "error": "错误描述"}          ← 错误消息
 ```
+
+> `error` 消息携带 `code` 字段（见 `errors.py` 的 `ErrorCode` 枚举），常见错误码：`WS_INVALID_MESSAGE`（消息格式不对）、`WS_EMPTY_ANSWER`（answer 没带 content）、`INTERVIEW_NOT_STARTED`（面试未开始）、`INTERVIEW_ALREADY_COMPLETED`（面试已结束）。
 
 ## 断线恢复三层机制
 

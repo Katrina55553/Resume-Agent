@@ -51,17 +51,39 @@ State（状态）→ Node（节点）→ Edge（边）→ Conditional Edge（条
 ```python
 # backend/app/agent/state.py
 class AgentState(TypedDict):
+    # 会话信息
+    session_id: str
+    interview_id: str
+
+    # 简历数据
+    resume_text: str | None
+    resume_summary: str | None
     doubt_points: list[dict]        # 存疑点列表
-    current_point_index: int        # 当前存疑点索引
-    current_round: int              # 当前追问轮次
-    point_states: dict              # 各存疑点状态
-    messages: list[dict]            # 对话历史
-    current_question: str           # 当前问题
-    current_answer: str             # 用户回答
-    current_evaluation: dict        # 当前评估结果
-    decision: str                   # 决策：follow_up/next_point/report
-    evaluations: list[dict]         # 所有评估历史
+
+    # 面试状态
+    phase: str                      # InterviewPhase value
+    question_count: int             # 已问问题总数
+    follow_up_count: int            # 当前问题追问次数
+    error_count: int                # 连续错误次数
+    total_tokens: int               # 累计 token
+
+    # 当前问题和回答
+    current_question: str | None
+    current_answer: str | None
+
+    # 消息历史（使用 Annotated 支持 reducer，自动合并）
+    messages: Annotated[list[dict], add]
+
+    # 评估结果
+    current_evaluation: dict | None
+    should_switch_topic: bool       # 是否切换存疑点
+    force_end: bool                 # 是否强制结束
+
+    # 最终报告
+    report: dict | None
 ```
+
+> **注意**：实际运行时 `ws.py` / `mcp/server.py` 加载状态会额外补充 `current_point_index`、`current_round`、`point_states`、`decision`、`evaluations`、`resume_data` 等字段（从 DB checkpoint 恢复）。`AgentState` TypedDict 是 LangGraph 编译时的最小集合，运行时 state 是个动态 dict。
 
 ### 节点函数
 
@@ -77,30 +99,49 @@ async def collect_answer(state: dict) -> dict:
     answer = state["current_answer"]
     return {"messages": [{"role": "user", "content": answer}]}
 
-# evaluate.py - 评估回答
+# evaluate.py - 评估回答并返回 decision
 async def evaluate_answer(state: dict) -> dict:
     score, feedback = llm_evaluate(state)
-    decision = "follow_up" if score < 75 else "next_point"
-    return {"current_evaluation": {...}, "decision": decision}
+    # 返回 decision 字段供 ws.py/mcp 分支处理
+    if current_round >= MAX_FOLLOW_UP or score >= 75:
+        if next_index >= len(doubt_points):
+            return {"current_evaluation": {...}, "decision": "report",
+                    "is_completed": True}
+        return {"current_evaluation": {...}, "decision": "next_point",
+                "current_point_index": next_index, "current_round": 1}
+    return {"current_evaluation": {...}, "decision": "follow_up",
+            "current_round": current_round + 1}
 ```
 
 ### 条件分支
 
+`graph.py` 的条件边只走两条出路——继续问 或 生成报告。具体的 follow_up / next_point 区分在 `evaluate_answer` 内部决定，并通过 `decision` 字段透传给上层（`ws.py` / `mcp/server.py`）：
+
 ```python
 # graph.py
-def route_after_evaluate(state: dict) -> str:
-    if state.get("is_completed"):
-        return "report"
-    if state["decision"] == "next_point":
-        return "next_point"
-    return "follow_up"
+def should_continue(state: dict) -> str:
+    # 1. 强制结束 → 直接生成报告
+    if state.get("force_end"):
+        return "generate_report"
 
-graph.add_conditional_edges("evaluate", route_after_evaluate, {
-    "follow_up": "question",     # 继续追问
-    "next_point": "question",    # 切换存疑点，生成新问题
-    "report": "report",          # 生成报告
+    # 2. 规则熔断（追问超限 / 错误超限 / token 超限 / 问题数超限）
+    force_switch, reason = should_force_switch(...)
+    if force_switch:
+        return "generate_report" if "结束面试" in reason else "generate_question"
+
+    # 3. 评估结果决定
+    if state.get("should_switch_topic"):
+        return "generate_question"
+    return "generate_question"
+
+# 条件边只有两个目标
+graph.add_conditional_edges("evaluate_answer", should_continue, {
+    "generate_question": "generate_question",  # 追问或切换下一个
+    "generate_report": "generate_report",      # 生成最终报告
 })
 ```
+
+> **关键点**：graph 层只关心"继续 or 结束"，`evaluate_answer` 返回的 `decision` 字段（follow_up / next_point / report）是给上层业务代码用的——`ws.py` 收到 decision=report 时调 `generate_report`，收到 follow_up/next_point 时调 `generate_question` 流式生成下一个问题。
 
 ## 三层防死循环
 
@@ -140,18 +181,28 @@ class InterviewRules:
 
 ### Q3: 条件分支的决策逻辑是什么？
 
-**A:** `evaluate` 节点返回一个 `decision` 字段：
+**A:** `evaluate_answer` 节点返回一个 `decision` 字段，分三种情况：
 
 ```python
-if current_round >= 3 or score >= 75:
-    # 追问轮次到上限 或 回答质量够好 → 切换下一个存疑点
-    decision = "next_point"
-elif all_points_done:
-    decision = "report"
+# evaluate.py 实际逻辑
+if current_round >= MAX_FOLLOW_UP or score >= 75:
+    # 追问轮次到上限(3) 或 回答质量够好(≥75) → 当前点 resolved
+    point_states[current_point_id] = "resolved"
+    next_index = point_index + 1
+    if next_index >= len(doubt_points):
+        # 所有点都问完 → 生成报告
+        decision = "report"
+    else:
+        # 切换到下一个存疑点
+        decision = "next_point"
+        point_states[next_point_id] = "active"
 else:
     # 回答不够好，继续追问
     decision = "follow_up"
+    current_round += 1
 ```
+
+> graph.py 的 `should_continue` 不读 `decision`，它读 `force_end` 和 `should_switch_topic`。`decision` 是给 `ws.py` / `mcp/server.py` 用的——它们据此决定调 `generate_report` 还是 `generate_question`。
 
 ### Q4: 如果 LLM 在 evaluate 阶段崩溃了怎么办？
 
