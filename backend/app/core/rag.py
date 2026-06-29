@@ -197,8 +197,45 @@ def _keyword_search(query: str, top_k: int = 3) -> list[dict]:
     return [e for _, e in scored[:top_k]]
 
 
+def _rrf_fusion(result_lists: list[list[dict]], k: int = 60, top_k: int = 3) -> list[dict]:
+    """Reciprocal Rank Fusion 融合多路检索结果
+
+    公式：score = Σ 1/(k + rank_i)，rank_i 是该结果在第 i 路检索中的排名（从 1 开始）
+    特点：只看排名不看绝对分数，量纲无关，适合异构检索器融合
+
+    Args:
+        result_lists: 多路检索结果列表，每路是 [{id, ...}, ...]
+        k: RRF 参数，默认 60（论文经验值）
+        top_k: 返回的结果数
+
+    Returns:
+        融合排序后的 top_k 结果
+    """
+    scores: dict[str, float] = {}
+    entries: dict[str, dict] = {}
+
+    for result_list in result_lists:
+        for rank, entry in enumerate(result_list, 1):
+            entry_id = entry.get("id") or entry.get("title", "")
+            if not entry_id:
+                continue
+            scores[entry_id] = scores.get(entry_id, 0.0) + 1.0 / (k + rank)
+            # 保留首次出现的完整 entry（同一条多路命中只存一份）
+            if entry_id not in entries:
+                entries[entry_id] = entry
+
+    # 按融合分数排序
+    sorted_ids = sorted(scores.keys(), key=lambda eid: scores[eid], reverse=True)
+    return [entries[eid] for eid in sorted_ids[:top_k]]
+
+
 def retrieve_context(query: str, top_k: int = 3) -> str:
-    """三级检索：Embedding 向量 → ES 全文 → 关键词匹配
+    """三级混合检索：双路 RRF 融合 + 关键词兜底
+
+    检索模式（由 RETRIEVAL_MODE 环境变量控制）：
+    - fusion（默认）：向量 + ES 双路并行召回，RRF 融合排序；关键词仅在两路都挂了时兜底
+    - cascade：串行降级（老逻辑），向量→ES→关键词，上一层有结果就跳过下一层
+    - vector_only：仅向量检索
 
     Args:
         query: 查询文本（通常是存疑点的 source_text + reason）
@@ -207,25 +244,60 @@ def retrieve_context(query: str, top_k: int = 3) -> str:
     Returns:
         格式化的上下文文本，可直接注入 LLM prompt
     """
-    results = []
+    mode = settings.RETRIEVAL_MODE
 
-    # 第 1 层：Embedding 向量检索（语义相似）
-    if is_llm_available():
-        results = _vector_search(query, top_k)
+    # ---------- fusion 模式：双路 RRF 融合 ----------
+    if mode == "fusion":
+        result_lists = []
 
-    # 第 2 层：Elasticsearch 全文检索（关键词精确 + 模糊）
-    if not results:
+        # 第 1 路：Embedding 向量检索
+        if is_llm_available():
+            vector_results = _vector_search(query, top_k * 2)
+            if vector_results:
+                result_lists.append(vector_results)
+
+        # 第 2 路：ES 全文检索
         try:
             from app.core.es import is_available as es_available
             from app.core.es import search as es_search
             if es_available():
-                results = es_search(query, top_k)
+                es_results = es_search(query, top_k * 2)
+                if es_results:
+                    result_lists.append(es_results)
         except ImportError:
             pass
 
-    # 第 3 层：关键词匹配（兜底）
-    if not results:
-        results = _keyword_search(query, top_k)
+        # 融合：双路都有结果才融合，单路有结果直接用
+        if len(result_lists) >= 2:
+            results = _rrf_fusion(result_lists, k=settings.RRF_K, top_k=top_k)
+        elif len(result_lists) == 1:
+            results = result_lists[0][:top_k]
+        else:
+            # 双路都挂了 → 关键词兜底
+            results = _keyword_search(query, top_k)
+
+    # ---------- cascade 模式：串行降级（老逻辑）----------
+    elif mode == "cascade":
+        results = []
+
+        if is_llm_available():
+            results = _vector_search(query, top_k)
+
+        if not results:
+            try:
+                from app.core.es import is_available as es_available
+                from app.core.es import search as es_search
+                if es_available():
+                    results = es_search(query, top_k)
+            except ImportError:
+                pass
+
+        if not results:
+            results = _keyword_search(query, top_k)
+
+    # ---------- vector_only 模式 ----------
+    else:
+        results = _vector_search(query, top_k) if is_llm_available() else []
 
     if not results:
         return ""

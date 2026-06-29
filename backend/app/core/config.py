@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = Field(default=60, ge=1, le=1000)
     TOKEN_QUOTA_PER_USER: int = Field(default=100000, ge=1000)
 
+    # RAG 检索配置
+    # 检索模式：fusion=双路 RRF 融合（默认）/ cascade=串行降级（老逻辑）/ vector_only=仅向量
+    RETRIEVAL_MODE: str = Field(default="fusion", pattern=r"^(fusion|cascade|vector_only)$")
+    # RRF 融合参数 k：score = Σ 1/(k + rank)，k 越大排名靠后结果差距越小，60 为经验值
+    RRF_K: int = Field(default=60, ge=1, le=1000)
+
     # 日志级别
     LOG_LEVEL: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 

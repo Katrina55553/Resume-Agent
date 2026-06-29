@@ -12,21 +12,43 @@ RAG（Retrieval Augmented Generation）= 检索增强生成。核心思路：
 
 ## 三级检索架构
 
+默认 `RETRIEVAL_MODE=fusion`：向量 + ES **双路并行召回 → RRF 融合**，关键词兜底。
+
 ```
 查询: "MySQL 慢查询优化"
     │
-    ├─→ 第 1 层: Embedding 向量检索（语义相似）
+    ├─→ 第 1 路: Embedding 向量检索（语义相似）
     │   "MySQL 查询太慢" → 匹配到 "慢查询优化"、"EXPLAIN 分析"
-    │   原理: 文字 → 1536维向量 → 余弦相似度比较
+    │   返回 top-2K
     │
-    ├─→ 第 2 层: Elasticsearch 全文检索（关键词精确+模糊）
+    ├─→ 第 2 路: Elasticsearch 全文检索（关键词精确+模糊）
     │   "MySQL" + "慢查询" → 匹配包含这些词的文档
-    │   原理: 倒排索引 + TF-IDF 评分
+    │   返回 top-2K
     │
-    └─→ 第 3 层: 关键词匹配（兜底）
-        "MySQL" → 匹配标题含 MySQL 的条目
-        原理: 简单字符串包含
+    │  ┌─────────────────────────────────────┐
+    └─►│  RRF 融合: score = Σ 1/(k + rank)    │
+       │  按融合分数排序，取 top-K             │
+       └─────────────────────────────────────┘
+            │
+            ├─ 双路都有结果 → 返回融合结果
+            ├─ 单路有结果   → 返回该路结果
+            └─ 双路都挂了   → 第 3 路: 关键词匹配兜底
 ```
+
+> 老逻辑 `RETRIEVAL_MODE=cascade` 仍保留：串行降级，向量→ES→关键词，上一层有结果就跳过下一层。
+
+## 为什么用 RRF 融合
+
+三路检索器返回的分数量纲不一致：
+- 向量检索：余弦相似度 0~1
+- ES 全文：BM25 分数 0~20
+- 关键词：命中数计数
+
+**RRF（Reciprocal Rank Fusion）只看排名不看绝对分数**，公式 `score = Σ 1/(k + rank)`，量纲无关，特别适合异构检索器融合。
+
+**为什么不三路全融合？** 关键词匹配是子串匹配，几乎所有结果都能命中，"排名"权重虚高会污染融合分数。所以只让向量+ES 参与融合，关键词作为兜底。
+
+**多路命中的好处**：同一条结果被两路都命中，RRF 分数累加，排名更靠前——这正是融合的价值，多路共识的结果更可靠。
 
 ## 为什么需要三层
 
@@ -77,23 +99,47 @@ def search(query: str, top_k: int = 3) -> list[dict]:
     return [hit["_source"] for hit in result["hits"]["hits"]]
 ```
 
-### 三级检索串联
+### RRF 融合
 
 ```python
-# rag.py - retrieve_context
-results = []
+# rag.py - _rrf_fusion
+def _rrf_fusion(result_lists, k=60, top_k=3):
+    scores = {}
+    entries = {}
+    for result_list in result_lists:
+        for rank, entry in enumerate(result_list, 1):
+            entry_id = entry.get("id") or entry.get("title", "")
+            scores[entry_id] = scores.get(entry_id, 0) + 1.0 / (k + rank)
+            if entry_id not in entries:
+                entries[entry_id] = entry
+    sorted_ids = sorted(scores.keys(), key=lambda eid: scores[eid], reverse=True)
+    return [entries[eid] for eid in sorted_ids[:top_k]]
+```
 
-# 第 1 层: Embedding
-if is_llm_available():
-    results = _vector_search(query, top_k)
+### 检索主入口（fusion 模式）
 
-# 第 2 层: ES
-if not results and es_available():
-    results = es_search(query, top_k)
+```python
+# rag.py - retrieve_context (fusion 模式)
+if mode == "fusion":
+    result_lists = []
+    if is_llm_available():
+        vector_results = _vector_search(query, top_k * 2)  # 多召回以便融合
+        if vector_results:
+            result_lists.append(vector_results)
+    try:
+        if es_available():
+            es_results = es_search(query, top_k * 2)
+            if es_results:
+                result_lists.append(es_results)
+    except ImportError:
+        pass
 
-# 第 3 层: 关键词
-if not results:
-    results = _keyword_search(query, top_k)
+    if len(result_lists) >= 2:
+        results = _rrf_fusion(result_lists, k=settings.RRF_K, top_k=top_k)
+    elif len(result_lists) == 1:
+        results = result_lists[0][:top_k]
+    else:
+        results = _keyword_search(query, top_k)  # 双路都挂了兜底
 ```
 
 ## 知识库数据
@@ -172,3 +218,15 @@ LLM 看到参考知识后，会生成更有针对性的问题。
 ### Q5: 如果知识库没有相关内容怎么办？
 
 **A:** 三级检索都返回空时，`retrieve_context` 返回空字符串。LLM prompt 里就没有参考知识部分，LLM 会用自己的通用知识生成问题。不会报错，只是专业度稍低。
+
+### Q6: 为什么用 RRF 融合而不是加权分数？k=60 怎么定的？
+
+**A:**
+
+**为什么 RRF 不用加权分数？** 三路检索器的分数量纲不一致——向量是余弦相似度 0~1，ES 是 BM25 分数可能 0~20，关键词是命中计数。加权融合要先归一化，归一化方法又是另一个调参坑。RRF 只看排名不看绝对分数，量纲无关，省了归一化这一步。
+
+**k=60 怎么定的？** 论文经验值。k 越大，排名靠后的结果分数差距越小（被压缩）；k 越小，头部结果优势越明显。60 是平衡点——既不让第 1 名压倒一切，也不让排名 10 和排名 1 没区别。我没做实测调优（数据量太小没意义），但读过原论文。
+
+**为什么关键词不参与融合？** 关键词匹配是子串匹配，几乎所有结果都能命中，"排名"权重虚高。如果让它参与融合，它的排名会稀释向量+ES 的判断。所以只让向量+ES 融合，关键词作为兜底。
+
+**多路命中怎么处理？** 同一条结果被两路都命中，RRF 分数累加，排名更靠前。这正是融合的价值——多路共识的结果更可靠。去重按 entry id，同一条只保留一份完整数据。
