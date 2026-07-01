@@ -151,6 +151,23 @@ MCP（Model Context Protocol）是 Anthropic 提出的标准协议，本质是**
 
 我的 7 个工具是：`diagnose_resume`、`start_interview`、`answer_interview`、`skip_question`、`end_interview`、`get_report`、`list_sessions`。
 
+| # | 工具名 | 业务阶段 | 必填参数 | 可选参数 | 干啥 |
+|---|--------|---------|---------|---------|------|
+| 1 | `diagnose_resume` | 上传+解析+诊断 | `file_path` | — | 传文件路径，内部跑完解析+诊断，返回结构化简历+存疑点 |
+| 2 | `start_interview` | 开始面试 | `session_id` | `selected_point_ids` | 初始化面试状态，生成第一个问题；可选指定面试范围 |
+| 3 | `answer_interview` | 提交回答 | `session_id`, `answer` | — | collect→evaluate→条件分支，返回下一个问题或最终报告 |
+| 4 | `skip_question` | 跳过存疑点 | `session_id` | — | 当前点标 skipped，index+1，生成下一个问题 |
+| 5 | `end_interview` | 提前结束 | `session_id` | — | 整场面试结束，基于已有评估生成报告 |
+| 6 | `get_report` | 查看报告 | `session_id` | — | 读 `interview_states.report_json`，面试后随时可查 |
+| 7 | `list_sessions` | 列出会话 | — | — | 唯一无参数工具，AI 用来发现有哪些历史会话 |
+
+**几个关键设计点：**
+
+- **`diagnose_resume` 合并了上传+解析+诊断三步**——早期拆三个工具 AI 经常调完 upload 不调 parse，流程卡住，合并后一个工具一气呵成。
+- **`skip_question` 独立成工具**而不是 `answer_interview` 的特殊参数——"跳过"和"回答"是语义完全不同的用户动作，AI 决策更清晰。
+- **`end_interview` 和 `get_report` 分开**——end 是动作（生成报告），get 是查询（读报告）。面试结束后用户随时能再查。
+- **`answer_interview` 一个工具一次调用拿完整结果**——输入就 2 个参数，输出是下一个问题或最终报告，AI 不用连环调。
+
 **划分原则是按业务流程切，不是按操作类型切。** 理由：
 
 **按操作类型切（CRUD 思路）会过细。** 比如如果按"查询/创建/更新"切，我会切出 `create_session`、`get_session`、`update_session_status`、`create_interview_state`、`update_interview_state`... 一堆工具，AI 根本不知道什么场景调哪个。AI 需要的是"动作语义"，不是"数据库操作语义"。
