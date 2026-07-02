@@ -341,9 +341,7 @@ resume-agent/
 │   ├── 05_WebSocket流式通信.md
 │   ├── 06_多模型路由.md
 │   ├── 07_综合面试题汇总.md
-│   ├── 08_简历逐条面试讲解.md
-│   ├── 09_面试项目介绍话术.md
-│   └── interview.md                       # 面试问答（实战模拟 + 追问应对）
+│   └── ...
 │
 ├── docker-compose.yml                       # 6 服务编排
 ├── AGENTS.md                                # Agent 开发规范（给 AI 协作者）
